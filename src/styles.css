@@ -378,10 +378,13 @@ main .links {
   align-items: center;
   padding: 96px var(--gutter);
 }
+.beat.slow {
+  min-height: 190vh;
+}
 .beat.tall {
-  min-height: 160vh;
+  min-height: 220vh;
   align-items: flex-start;
-  padding-top: 22vh;
+  padding-top: 30vh;
 }
 .beat.end {
   justify-content: flex-end;
@@ -626,6 +629,8 @@ h2 {
 /* Projects: sticky panel on the left, the crate film behind */
 .projects {
   position: relative;
+  height: 190vh;
+  height: 190svh;
 }
 .sticky {
   position: sticky;
@@ -690,6 +695,38 @@ h2 {
   padding: 0;
   list-style: none;
 }
+.numbers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 18px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.numbers button {
+  min-width: 34px;
+  height: 30px;
+  padding: 0 6px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: none;
+  color: var(--muted);
+  font: 500 12px/1 'JetBrains Mono', monospace;
+  cursor: pointer;
+  transition: color 0.2s, border-color 0.2s, background-color 0.2s;
+}
+.numbers button:hover {
+  color: var(--ink);
+  border-color: rgb(233 238 247 / 0.35);
+}
+.numbers button.on {
+  background: var(--amber);
+  border-color: var(--amber);
+  color: var(--navy);
+}
+.numbers button:disabled {
+  cursor: default;
+}
 .tags li {
   padding: 3px 8px;
   border: 1px solid var(--line);
@@ -707,6 +744,7 @@ h2 {
   }
   .card-info .sub,
   .panel .hint,
+  .numbers,
   .tags {
     display: none;
   }

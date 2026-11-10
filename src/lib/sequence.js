@@ -3,7 +3,8 @@
 // Two sequences: the main film ('f', with beats) and the crate loop ('l', 48 frames that start and end
 // in the same pose). The page's markers set the timeline:
 //   [data-beat] ×5   intro · needle · teardown · numbers · crate  → main film, beat to beat
-//   [data-loop-end]  the loop plays once per project between the crate beat and this marker
+//   [data-loop-end]  between the crate beat and this marker the crate loop is shown; it is played by
+//                    time, not by the scroll: lift() pulls the record out, putBack() returns it
 //   [data-contact]   main film again, from the crate beat to the last beat
 // Frames load coarse-to-fine, so the film is usable after ~20 images.
 
@@ -18,7 +19,7 @@ export function pickVariant() {
 }
 
 export class Sequence {
-  constructor(canvas, { manifest, variant, lenis, reduce, count = 1, onFrame, onReady }) {
+  constructor(canvas, { manifest, variant, lenis, reduce, onFrame, onReady, onEnter, onLeave }) {
     this.canvas = canvas;
     this.ctx = canvas.getContext('2d', { alpha: false });
     const name = manifest[variant.name] ? variant.name : 'wide';
@@ -26,10 +27,12 @@ export class Sequence {
     this.base = `/frames/${name}-${variant.size}/`;
     this.lenis = lenis;
     this.reduce = reduce;
-    this.count = count;
-    this.cb = { onFrame, onReady };
+    this.cb = { onFrame, onReady, onEnter, onLeave };
     this.images = { f: new Array(this.m.frames), l: new Array(this.m.loop || 0) };
     this.keys = { beats: [], loopEnd: 0, contact: 0 };
+    // Time-driven crate loop: frame, target frame, callback when the target is reached.
+    this.player = { f: 0, to: 0, done: null, idle: 0, inside: false };
+    this.now = performance.now();
     this.last = '';
     this.ready = false;
     this.alive = true;
@@ -45,11 +48,6 @@ export class Sequence {
       this.raf = requestAnimationFrame(loop);
     };
     this.raf = requestAnimationFrame(loop);
-  }
-
-  setCount(n) {
-    this.count = Math.max(1, n);
-    this.last = '';
   }
 
   // Coarse-to-fine: every 8th frame of both sequences, then every 4th, 2nd, then the rest.
@@ -125,10 +123,7 @@ export class Sequence {
       }
     }
     if (this.m.loop && loopEnd > beats[4] && y < loopEnd) {
-      const u = ((y - beats[4]) / (loopEnd - beats[4])) * this.count;
-      const index = Math.min(this.count - 1, Math.floor(u));
-      const phase = this.reduce ? 0.55 : clamp(u - index, 0, 1);
-      return { seq: 'l', f: phase * (this.m.loop - 1), index, phase };
+      return { seq: 'l', f: this.player.f, index: -1, phase: 0 };
     }
     if (y < loopEnd) return main(B[4]);
     if (contact > loopEnd && y < contact) {
@@ -144,30 +139,78 @@ export class Sequence {
     return -1;
   }
 
+  // The record held out of the crate (the loop's hold pose), and the frames it drifts between.
+  static HOLD = 27;
+  static IDLE = [24, 30];
+
+  // Pull the front record out of the crate (frames 0 → HOLD).
+  lift(done) {
+    this.player.to = Sequence.HOLD;
+    this.player.done = done || null;
+    if (this.reduce) this.player.f = Sequence.HOLD;
+  }
+
+  // Put it back (HOLD → last frame), then reset to the first frame and call `done`.
+  putBack(done) {
+    const end = this.m.loop - 1;
+    this.player.to = end;
+    this.player.done = () => {
+      this.player.f = 0;
+      this.player.to = 0;
+      done?.();
+    };
+    if (this.reduce) this.player.f = end;
+  }
+
+  advance(dt) {
+    const pl = this.player;
+    const speed = 34; // frames per second
+    if (pl.f < pl.to) pl.f = Math.min(pl.to, pl.f + dt * speed);
+    else if (pl.f > pl.to) pl.f = Math.max(pl.to, pl.f - dt * speed);
+    if (pl.f === pl.to && pl.done) {
+      const cb = pl.done;
+      pl.done = null;
+      cb();
+    }
+    // Held out: a slow drift so the record never looks frozen.
+    if (pl.f === Sequence.HOLD && pl.to === Sequence.HOLD && !pl.done && !this.reduce) {
+      pl.idle += dt;
+      const [a, b] = Sequence.IDLE;
+      return a + ((b - a) * (1 - Math.cos(pl.idle * 0.9))) / 2;
+    }
+    return pl.f;
+  }
+
   tick() {
+    const now = performance.now();
+    const dt = Math.min(0.05, (now - this.now) / 1000);
+    this.now = now;
     if (this.frames++ % 30 === 0) this.measure();
     const at = this.locate(window.scrollY);
-    const key = `${at.seq}${Math.round(at.f * 8) / 8}`;
+    if (at.seq === 'l') {
+      at.f = this.advance(dt);
+      if (!this.player.inside) {
+        this.player.inside = true;
+        this.cb.onEnter?.();
+      }
+    } else if (this.player.inside) {
+      this.player.inside = false;
+      this.player.f = 0;
+      this.player.to = 0;
+      this.player.done = null;
+      this.cb.onLeave?.();
+    }
+    // Nearest rendered frame, no cross-fade: a fade between two camera positions reads as blur.
+    const key = `${at.seq}${Math.round(at.f)}`;
     if (key === this.last) return;
     this.last = key;
-    const imgs = this.images[at.seq];
-    const a = this.nearest(at.seq, Math.floor(at.f), -1);
-    const b = this.nearest(at.seq, Math.ceil(at.f), 1);
-    if (a < 0 && b < 0) return;
-    const ia = a >= 0 ? a : b;
-    const { ctx } = this;
+    let i = this.nearest(at.seq, Math.round(at.f), -1);
+    if (i < 0) i = this.nearest(at.seq, Math.round(at.f), 1);
+    if (i < 0) return;
     const { dx, dy, dw, dh } = this.fit;
-    ctx.globalAlpha = 1;
-    ctx.drawImage(imgs[ia], dx, dy, dw, dh);
-    if (b >= 0 && b !== ia) {
-      const t = (at.f - ia) / (b - ia);
-      if (t > 0.02) {
-        ctx.globalAlpha = clamp(t, 0, 1);
-        ctx.drawImage(imgs[b], dx, dy, dw, dh);
-        ctx.globalAlpha = 1;
-      }
-    }
-    this.cb.onFrame?.({ ...at, project: (name) => this.project(at, name), face: () => this.face(at) });
+    this.ctx.drawImage(this.images[at.seq][i], dx, dy, dw, dh);
+    const shown = { ...at, f: i };
+    this.cb.onFrame?.({ ...shown, project: (name) => this.project(shown, name), face: () => this.face(shown) });
   }
 
   toScreen([x, y]) {

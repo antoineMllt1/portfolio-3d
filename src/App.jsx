@@ -1,6 +1,6 @@
 // The page: HTML words over a rendered film. The [data-beat] markers are the film's beats
-// (intro · needle · teardown · numbers · crate); the projects section plays the crate loop once per
-// project, and the contact section plays the last camera move.
+// (intro · needle · teardown · numbers · crate). In the projects section the crate loop is played by
+// time: arrows, keys or the project numbers put the record back and pull out the next one.
 import Lenis from 'lenis';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { copy, pick } from './lib/copy.js';
@@ -103,7 +103,7 @@ export default function App() {
       .then((r) => r.json())
       .then((manifest) => {
         if (cancelled) return;
-        lenis = reduce ? null : new Lenis({ autoRaf: false, lerp: 0.1, smoothWheel: true });
+        lenis = reduce ? null : new Lenis({ autoRaf: false, lerp: 0.075, smoothWheel: true, wheelMultiplier: 0.85 });
         lenisRef.current = lenis;
         const variant = pickVariant();
         const teardown = (manifest[variant.name] || manifest.wide).beats[2] - 1;
@@ -112,8 +112,9 @@ export default function App() {
           variant,
           lenis,
           reduce,
-          count: countRef.current,
           onReady: () => setReady(true),
+          onEnter: () => seq.lift(),
+          onLeave: () => setBusy(false),
           onFrame: (at) => {
             frameRef.current = at;
             const show = at.seq === 'f' ? Math.max(0, 1 - Math.abs(at.f - teardown) / 12) : 0;
@@ -132,10 +133,6 @@ export default function App() {
               art.style.opacity = String(alpha);
               if (alpha > 0) art.style.transform = matrix3dFor(ART, ART, face.corners);
             }
-            if (at.seq === 'l' && at.index !== currentRef.current) {
-              currentRef.current = at.index;
-              setCurrent(at.index);
-            }
           },
         });
         seqRef.current = seq;
@@ -148,11 +145,7 @@ export default function App() {
     };
   }, [reduce]);
 
-  const countRef = useRef(1);
-  useEffect(() => {
-    countRef.current = Math.max(1, projects.length);
-    seqRef.current?.setCount(countRef.current);
-  }, [projects.length]);
+  const [busy, setBusy] = useState(false);
 
   // Clicks on the film: the record (centre and rim come from the film) starts the mix; the lifted
   // sleeve opens the project.
@@ -203,17 +196,41 @@ export default function App() {
   const openRef = useRef(() => {});
   openRef.current = () => openProject(projects[currentRef.current]);
 
-  // Scroll so that project i is lifted out of the crate (the middle of its loop).
-  const goProject = (i) => {
-    const n = Math.max(1, projects.length);
-    const start = document.querySelector('[data-loop-start]');
-    const end = document.querySelector('[data-loop-end]');
-    if (!start || !end) return;
-    const top = (el) => el.getBoundingClientRect().top + window.scrollY;
-    const y = top(start) + ((Math.min(n - 1, Math.max(0, i)) + 0.55) / n) * (top(end) - top(start));
-    if (lenisRef.current) lenisRef.current.scrollTo(y, { duration: 1.1 });
-    else window.scrollTo({ top: y, behavior: reduce ? 'auto' : 'smooth' });
-  };
+  // Change record: the current one goes back into the crate, the cover swaps while the sleeve's
+  // face is hidden, and the next one is pulled out.
+  const goProject = useCallback((i) => {
+    const n = projects.length;
+    if (!n || busy) return;
+    const next = ((i % n) + n) % n;
+    if (next === currentRef.current) return;
+    const seq = seqRef.current;
+    if (!seq || !seq.player.inside) {
+      currentRef.current = next;
+      setCurrent(next);
+      return;
+    }
+    setBusy(true);
+    seq.putBack(() => {
+      currentRef.current = next;
+      setCurrent(next);
+      seq.lift(() => setBusy(false));
+    });
+  }, [projects.length, busy]);
+  const goRef = useRef(goProject);
+  goRef.current = goProject;
+
+  // ← → keys browse the crate while it is on screen.
+  useEffect(() => {
+    const onKey = (e) => {
+      if (!seqRef.current?.player.inside || e.target.closest?.('input, textarea')) return;
+      if (e.key === 'ArrowRight') goRef.current(currentRef.current + 1);
+      else if (e.key === 'ArrowLeft') goRef.current(currentRef.current - 1);
+      else return;
+      e.preventDefault();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   const go = (i) => {
     const el = document.querySelector(`[data-track="${i}"]`);
@@ -310,7 +327,7 @@ export default function App() {
           </div>
         </section>
 
-        <section className="beat" data-beat data-track="1">
+        <section className="beat slow" data-beat data-track="1">
           <div className="copy">
             <p className="kicker mono">{t.needle.kicker}</p>
             <h2>{t.needle.title}</h2>
@@ -332,7 +349,7 @@ export default function App() {
           </div>
         </section>
 
-        <section className="beat end" data-beat data-track="3">
+        <section className="beat end slow" data-beat data-track="3">
           <div className="copy">
             <p className="kicker mono">{t.numbers.kicker}</p>
             <h2>{t.numbers.title}</h2>
@@ -351,7 +368,7 @@ export default function App() {
           </div>
         </section>
 
-        <section className="projects" data-beat data-loop-start data-track="4" aria-labelledby="projects-title" style={{ height: `calc(${Math.max(1, projects.length)} * 70vh + 100vh)` }}>
+        <section className="projects" data-beat data-track="4" aria-labelledby="projects-title">
           <div className="sticky">
             <div className="copy panel" data-ui>
               <p className="kicker mono">
@@ -371,9 +388,18 @@ export default function App() {
               )}
               <div className="row">
                 {p && <a className="btn primary" href={`${main}/projets/${p.slug}`} target="_blank" rel="noreferrer">{t.crate.open} ↗</a>}
-                <button type="button" className="btn icon" aria-label={t.crate.prev} disabled={current <= 0} onClick={() => goProject(current - 1)}>←</button>
-                <button type="button" className="btn icon" aria-label={t.crate.next} disabled={current >= projects.length - 1} onClick={() => goProject(current + 1)}>→</button>
+                <button type="button" className="btn icon" aria-label={t.crate.prev} disabled={busy} onClick={() => goProject(current - 1)}>←</button>
+                <button type="button" className="btn icon" aria-label={t.crate.next} disabled={busy} onClick={() => goProject(current + 1)}>→</button>
               </div>
+              <ol className="numbers" aria-label={t.crate.title}>
+                {projects.map((proj, i) => (
+                  <li key={proj.slug}>
+                    <button type="button" className={i === current ? 'on' : ''} disabled={busy} onClick={() => goProject(i)} aria-current={i === current ? 'true' : undefined} title={pick(proj.title, lang)}>
+                      {String(i + 1).padStart(2, '0')}
+                    </button>
+                  </li>
+                ))}
+              </ol>
               <p className="mono hint">{t.crate.hint}</p>
             </div>
           </div>

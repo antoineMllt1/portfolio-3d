@@ -45,7 +45,7 @@ export const copy = {
       open: 'Voir l’étude de cas',
       prev: 'Projet précédent',
       next: 'Projet suivant',
-      hint: 'Fais défiler pour sortir le disque suivant · clique sur la pochette pour l’ouvrir',
+      hint: 'Flèches ← → pour changer de disque · clique sur la pochette pour l’ouvrir',
     },
     contact: {
       kicker: 'B2 · Face B',
@@ -100,7 +100,7 @@ export const copy = {
       open: 'Read the case study',
       prev: 'Previous project',
       next: 'Next project',
-      hint: 'Scroll to pull out the next record · click the sleeve to open it',
+      hint: '← → keys to change record · click the sleeve to open it',
     },
     contact: {
       kicker: 'B2 · Side B',
