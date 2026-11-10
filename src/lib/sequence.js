@@ -28,7 +28,7 @@ export class Sequence {
     this.reduce = reduce;
     this.count = count;
     this.cb = { onFrame, onReady };
-    this.images = { f: new Array(this.m.frames), l: new Array(this.m.loop) };
+    this.images = { f: new Array(this.m.frames), l: new Array(this.m.loop || 0) };
     this.keys = { beats: [], loopEnd: 0, contact: 0 };
     this.last = '';
     this.ready = false;
@@ -114,6 +114,7 @@ export class Sequence {
   locate(y) {
     const { beats, loopEnd, contact } = this.keys;
     const B = this.m.beats.map((b) => b - 1);
+    if (B.length < 6) B[5] = B[4]; // film without the crate loop (older render)
     const main = (f) => ({ seq: 'f', f: clamp(f, 0, this.m.frames - 1), index: -1, phase: 0 });
     if (beats.length < 5) return main(0);
     if (y <= beats[0]) return main(B[0]);
@@ -123,12 +124,13 @@ export class Sequence {
         return main(this.reduce ? B[t < 0.5 ? i : i + 1] : B[i] + t * (B[i + 1] - B[i]));
       }
     }
-    if (loopEnd > beats[4] && y < loopEnd) {
+    if (this.m.loop && loopEnd > beats[4] && y < loopEnd) {
       const u = ((y - beats[4]) / (loopEnd - beats[4])) * this.count;
       const index = Math.min(this.count - 1, Math.floor(u));
       const phase = this.reduce ? 0.55 : clamp(u - index, 0, 1);
       return { seq: 'l', f: phase * (this.m.loop - 1), index, phase };
     }
+    if (y < loopEnd) return main(B[4]);
     if (contact > loopEnd && y < contact) {
       const t = clamp((y - loopEnd) / Math.max(1, contact - loopEnd), 0, 1);
       return main(this.reduce ? B[t < 0.5 ? 4 : 5] : B[4] + t * (B[5] - B[4]));
