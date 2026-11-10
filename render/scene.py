@@ -3,6 +3,7 @@
 #   python render/scene.py -- --variant wide --samples 32 --out render/out/wide           # main film
 #   python render/scene.py -- --variant wide --loop --samples 32 --out render/out/wide    # crate loop
 #   python render/scene.py -- --variant wide --still 120 --scale 50 --out /tmp/test       # one frame
+#   python render/scene.py -- --variant wide --stills --scale 160 --out render/out/wide   # HD holds
 #
 # Main film, 150 frames, beats: 1 intro · 30 needle · 60 teardown · 90 numbers · 120 crate · 150 top-down.
 # Crate loop, 48 frames (201–248): the front sleeve is lifted out, turned to the camera, the record
@@ -30,6 +31,7 @@ ap.add_argument('--still', type=int, default=0)
 ap.add_argument('--scale', type=int, default=100)
 ap.add_argument('--out', default='render/out/wide')
 ap.add_argument('--anchors-only', action='store_true')
+ap.add_argument('--stills', action='store_true', help='render the hold frames (beats + loop hold) as h_*.png, at --scale')
 args = ap.parse_args(argv)
 HERE = os.path.dirname(os.path.abspath(__file__))
 TEX = os.path.join(HERE, 'tex')
@@ -671,7 +673,16 @@ if args.anchors_only:
     sys.exit(0)
 
 # ---------- Render ----------
-if args.still:
+HOLDS = [*BEATS, *range(L0 + 24, L0 + 31)]  # the frames the page rests on: sharper, bigger renders
+if args.stills:
+    for f in HOLDS:
+        path = os.path.join(args.out, f'h_{f:04d}.png')
+        if os.path.exists(path):
+            continue
+        scene.frame_set(f)
+        scene.render.filepath = path
+        bpy.ops.render.render(write_still=True)
+elif args.still:
     scene.frame_set(args.still)
     scene.render.filepath = os.path.join(args.out, f'still-{args.still:04d}.png')
     bpy.ops.render.render(write_still=True)
