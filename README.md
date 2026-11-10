@@ -1,53 +1,50 @@
 # Portfolio 3D — Antoine Millot
 
-The experimental version of the portfolio: a photoreal turntable rendered in Blender (Cycles) and
-played by the scroll, like a product page. The classic, lighter portfolio lives in
-[`portfolio-pro`](https://github.com/antoineMllt1/portfolio-pro); this site reads its projects,
-certifications and contact details from that site's `/api/content`, so edits made in its `/admin`
-show up here too.
+A portfolio shot like a film: a turntable and a crate of records on a sideboard, rendered in
+Blender (Cycles) and played by the page. Each project is a record sleeve in the crate.
+
+The lighter, classic portfolio lives in [`portfolio-pro`](https://github.com/antoineMllt1/portfolio-pro).
+This site reads its projects, certifications and contact details from that site's `/api/content`.
 
 ## How it works
 
-- **The film** — `render/scene.py` builds the turntable (plinth, platter, record, tonearm) and a
-  plywood crate of record sleeves, lit by a studio HDRI and real wood textures (Poly Haven, CC0), and
-  renders two sequences, each in 16:9 (desktop) and 9:16 (phones):
-  - the main film, 150 frames over six beats;
-  - the crate loop, 48 frames: the front sleeve is lifted out, turned to the camera, the record slides
-    out, and everything goes back. The loop plays once per project. The sleeve's front is left white
-    and the browser multiplies the project cover onto it (CSS `matrix3d` from the face corners exported
-    for every frame), so covers come from the admin and take the film's light.
-- **The page** — `src/lib/sequence.js` draws the frame that matches the scroll position on a canvas,
-  cross-fading between frames. Frames load coarse to fine (every 8th first), so the film works after
-  about 15 images. Beats are the `[data-key]` sections in `src/App.jsx`.
-- **The server** — `server/index.js` serves the build, relays `/api/content`, `/media` and `/uploads`
-  from the main site (`MAIN_URL`), and falls back to `server/snapshot.json` if that site is down.
+- **The scene** (`render/`) is built at real-world scale: a scanned sideboard, plant and lamp, wood
+  and plaster textures and a room HDRI from Poly Haven (CC0); the turntable and the crate are
+  modelled in code (`parts.py`), down to the cartridge leads, the strobe dots and the dust.
+- **The sleeves** (`scripts/covers/covers.cjs`) are designed as a label series, one front and one
+  back per project, and printed into the scene as textures: they take the room's light and shadows.
+- **The film** (`render/scene.py`) is two frame sequences with motion blur, plus bigger "rest" frames:
+  - `f`, 121 frames: the camera travels between five beats (intro, stylus, controls, crate, room);
+  - `c`, 116 frames: going through the crate; record *k* is pulled up at frame `6 + 10k`;
+  - 17 rest frames (one per beat and per record) at 2560 px, 96 samples.
+- **The page** (`src/`) has five floors. One wheel step, swipe or key moves one floor and the film
+  travels there (`lib/film.js`, `lib/input.js`). On the projects floor, picking a title plays the
+  crate sequence up to that record. At rest the clean frame fades in and drifts very slowly.
+- **The server** (`server/index.js`) serves the build and relays `/api/content`, `/media` and
+  `/uploads` from the main site (`MAIN_URL`), with `server/snapshot.json` as a fallback.
 
-| Beat | Frame | On screen |
-| --- | --- | --- |
-| Intro | 1 | Whole turntable, name and role |
-| Needle | 30 | Close-up as the needle drops |
-| Teardown | 60 | Base, platter, record and arm apart, labelled Data / AI / Automation / Impact |
-| Numbers | 90 | Orbit from the other side, key figures |
-| Crate | 120 | The crate; then the loop, once per project |
-| Contact | 150 | Top-down record |
+Reduced motion: no travel and no drift; floors and records change with a short dissolve.
 
-Reduced motion: no smooth scrolling, the film jumps from beat to beat, and each project shows the
-lifted record directly.
+### Adding a project
 
-## Rendering the film again
+The sleeves are part of the rendered film, so a new project needs a sleeve and a render: add it to
+`P` in `scripts/covers/covers.cjs`, run the covers script and render again. Until then, a project
+that exists in the admin but not in the crate is listed under the others with a link to its case study.
+
+## Rendering
 
 ```bash
-pip install bpy==5.2.3 pillow numpy   # official Blender module, ships OpenImageDenoise
-python3 render/textures.py            # label + groove textures (run from render/)
-python render/scene.py -- --variant wide --samples 32 --out render/out/wide
-python render/scene.py -- --variant wide --loop --samples 32 --out render/out/wide
-python render/scene.py -- --variant tall --samples 32 --out render/out/tall
-python render/scene.py -- --variant tall --loop --samples 32 --out render/out/tall
-npm run frames                         # → public/frames (WebP, 2 sizes per variant) + manifest
+pip install bpy==5.2.3 pillow numpy            # official Blender module (ships OpenImageDenoise)
+python3 render/fetch_assets.py                  # Poly Haven assets → render/assets (245 MB, not committed)
+node scripts/covers/covers.cjs                  # sleeves → render/covers + public/covers
+python render/scene.py -- --holds --scale 160 --samples 96 --out render/out/wide
+python render/scene.py -- --seq f --scale 80 --samples 16 --out render/out/wide
+python render/scene.py -- --seq c --scale 80 --samples 16 --out render/out/wide
+npm run frames                                  # → public/frames (WebP) + manifest.json
 ```
 
-About 35 s per desktop frame on 4 CPU cores. `--still 120 --scale 50` renders one test frame.
-`render/assets` holds the HDRI and textures (Poly Haven, CC0).
+On 4 CPU cores: about 5 min per rest frame, 45 s per motion frame. Renders resume where they stopped.
+`--still 91 --scale 50` renders one test frame; `--variant tall` frames the scene for phones.
 
 ## Run locally
 

@@ -2,4 +2,6 @@ node_modules
 dist
 .env
 render/out
-render/tex
+render/assets
+render/covers
+__pycache__

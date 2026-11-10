@@ -1,7 +1,7 @@
-# Turns the Blender output (PNG frames + anchors.json per variant) into the web film:
-# public/frames/{wide-l,wide-s,tall-l,tall-s}/f_0001.webp … (main film) and l_0001.webp … (crate loop),
-# plus manifest.json and poster.webp.
+# Turns the Blender output into the web film: public/frames/{variant}-{l,s}/…webp + manifest.json.
 #   python3 scripts/frames.py render/out
+# Per variant folder (wide, tall): f_*.png and c_*.png (motion frames), h_f_*.png and h_c_*.png (the
+# bigger rest frames), anchors.json. A variant with rest frames only is published as `stills`.
 import json
 import os
 import sys
@@ -10,57 +10,53 @@ from PIL import Image
 
 src = sys.argv[1] if len(sys.argv) > 1 else 'render/out'
 dst = 'public/frames'
-SIZES = {'wide': {'l': (1600, 80), 's': (1024, 76)}, 'tall': {'l': (720, 78), 's': (480, 74)}}
-# The frames the page rests on, rendered bigger (h_*.png): sharp on dense screens.
-HOLD_SIZES = {'wide': {'l': (2560, 82), 's': (1600, 80)}, 'tall': {'l': (1080, 80), 's': (720, 78)}}
-LOOP_START = 201
-ANCHOR_X = {'wide': 0.6, 'tall': 0.5}  # how a cover-cropped frame is anchored horizontally
+# (motion width, quality), (hold width, quality) per size
+SIZES = {
+    'wide': {'l': ((1280, 78), (2560, 84)), 's': ((960, 76), (1600, 82))},
+    'tall': {'l': ((720, 78), (1080, 84)), 's': ((540, 76), (810, 82))},
+}
+ANCHOR_X = {'wide': 0.68, 'tall': 0.5}  # how a cover-cropped frame is anchored horizontally
+
+
+def save(path_in, path_out, width, quality):
+    im = Image.open(path_in).convert('RGB')
+    if im.width != width:
+        im = im.resize((width, round(im.height * width / im.width)), Image.LANCZOS)
+    im.save(path_out, 'WEBP', quality=quality, method=6)
+    return os.path.getsize(path_out)
+
 
 manifest = {}
 for variant, sizes in SIZES.items():
     folder = os.path.join(src, variant)
-    if not os.path.isdir(folder):
-        print(f'{variant}: nothing rendered, skipped')
+    if not os.path.isfile(os.path.join(folder, 'anchors.json')):
         continue
     with open(os.path.join(folder, 'anchors.json')) as fh:
         anchors = json.load(fh)
-    seqs = {}
-    for prefix, expected in (('f_', anchors['frames']), ('l_', anchors['loop'])):
-        files = sorted(f for f in os.listdir(folder) if f.startswith(prefix) and f.endswith('.png'))
-        if len(files) != expected:
-            print(f'{variant} {prefix}: {len(files)}/{expected} frames rendered, variant skipped')
-            seqs = None
-            break
-        seqs[prefix] = files
-    if not seqs:
+    names = sorted(os.listdir(folder))
+    holds = [n for n in names if n.startswith('h_') and n.endswith('.png')]
+    need = len(anchors['beats']) + len(anchors['crate']['order'])
+    if len(holds) < need:
+        print(f'{variant}: {len(holds)}/{need} rest frames, skipped')
         continue
-    for size, (width, quality) in sizes.items():
+    motion = {s: [n for n in names if n.startswith(s + '_') and n.endswith('.png')] for s in ('f', 'c')}
+    stills = len(motion['f']) < anchors['frames'] or len(motion['c']) < anchors['crate']['frames']
+    if stills:
+        print(f'{variant}: motion frames incomplete ({len(motion["f"])}/{anchors["frames"]}, {len(motion["c"])}/{anchors["crate"]["frames"]}): rest frames only')
+    for size, ((mw, mq), (hw, hq)) in sizes.items():
         out = os.path.join(dst, f'{variant}-{size}')
         os.makedirs(out, exist_ok=True)
         total = 0
-        for prefix, files in seqs.items():
-            for i, name in enumerate(files, 1):
-                im = Image.open(os.path.join(folder, name)).convert('RGB')
-                h = round(im.height * width / im.width)
-                im = im.resize((width, h), Image.LANCZOS)
-                path = os.path.join(out, f'{prefix}{i:04d}.webp')
-                im.save(path, 'WEBP', quality=quality, method=6)
-                total += os.path.getsize(path)
-                if variant == 'wide' and size == 'l' and prefix == 'f_' and i == 1:
-                    im.save(os.path.join(dst, 'poster.webp'), 'WEBP', quality=72, method=6)
-        # Hold frames: h_0030.png → h_f_0030.webp (main, 1-based) or h_l_0025.webp (loop, 1-based)
-        holds = []
-        hw, hq = HOLD_SIZES[variant][size]
-        for name in sorted(f for f in os.listdir(folder) if f.startswith('h_') and f.endswith('.png')):
-            frame = int(name[2:6])
-            seq, idx = ('f', frame) if frame <= anchors['frames'] else ('l', frame - LOOP_START + 1)
-            im = Image.open(os.path.join(folder, name)).convert('RGB')
-            im = im.resize((hw, round(im.height * hw / im.width)), Image.LANCZOS)
-            path = os.path.join(out, f'h_{seq}_{idx:04d}.webp')
-            im.save(path, 'WEBP', quality=hq, method=6)
-            total += os.path.getsize(path)
-            holds.append([seq, idx - 1])
-        print(f'{variant}-{size}: {sum(len(f) for f in seqs.values())} frames + {len(holds)} holds, {total / 1e6:.1f} MB')
-    manifest[variant] = {**anchors, 'anchorX': ANCHOR_X[variant], 'holds': holds}
+        if not stills:
+            for seq in ('f', 'c'):
+                for n in motion[seq]:
+                    total += save(os.path.join(folder, n), os.path.join(out, n[:-4] + '.webp'), mw, mq)
+        for n in holds:
+            total += save(os.path.join(folder, n), os.path.join(out, n[:-4] + '.webp'), hw, hq)
+        print(f'{variant}-{size}: {total / 1e6:.1f} MB')
+    if variant == 'wide':
+        save(os.path.join(folder, 'h_f_0001.png'), os.path.join(dst, 'poster.webp'), 960, 60)
+    manifest[variant] = {**anchors, 'anchorX': ANCHOR_X[variant], 'stills': stills}
 with open(os.path.join(dst, 'manifest.json'), 'w') as fh:
     json.dump(manifest, fh, separators=(',', ':'))
+print('variants:', ', '.join(manifest) or 'none')
