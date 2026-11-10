@@ -14,7 +14,7 @@ export const copy = {
       name: 'Antoine Millot',
       line: 'Data Analyst & AI Engineer.',
       sub: 'Je transforme la donnée en décisions et les tâches répétitives en workflows automatisés : dashboards, agents IA et outils sur mesure.',
-      hint: 'Fais défiler pour lancer le film · clique sur le vinyle pour la musique',
+      hint: 'Molette, flèches ou glisser : un cran = un étage · clique sur le vinyle pour la musique',
     },
     needle: {
       kicker: 'A2 · Tête de lecture',
@@ -45,7 +45,7 @@ export const copy = {
       open: 'Voir l’étude de cas',
       prev: 'Projet précédent',
       next: 'Projet suivant',
-      hint: 'Flèches ← → pour changer de disque · clique sur la pochette pour l’ouvrir',
+      hint: 'Choisis une pochette, ou ← → · clique sur le disque sorti pour l’ouvrir',
     },
     contact: {
       kicker: 'B2 · Face B',
@@ -69,7 +69,7 @@ export const copy = {
       name: 'Antoine Millot',
       line: 'Data Analyst & AI Engineer.',
       sub: 'I turn data into decisions and repetitive tasks into automated workflows: dashboards, AI agents and custom tools.',
-      hint: 'Scroll to play the film · click the record for music',
+      hint: 'Wheel, keys or swipe: one step = one floor · click the record for music',
     },
     needle: {
       kicker: 'A2 · The needle',
@@ -100,7 +100,7 @@ export const copy = {
       open: 'Read the case study',
       prev: 'Previous project',
       next: 'Next project',
-      hint: '← → keys to change record · click the sleeve to open it',
+      hint: 'Pick a cover, or ← → · click the lifted record to open it',
     },
     contact: {
       kicker: 'B2 · Side B',

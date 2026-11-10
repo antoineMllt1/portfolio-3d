@@ -1,14 +1,15 @@
-// The page: HTML words over a rendered film. The [data-beat] markers are the film's beats
-// (intro · needle · teardown · numbers · crate). In the projects section the crate loop is played by
-// time: arrows, keys or the project numbers put the record back and pull out the next one.
-import Lenis from 'lenis';
+// The page: six floors over a rendered film. One scroll step (wheel, swipe, keys) moves one floor;
+// the film travels by itself from beat to beat. On the projects floor the record is pulled out of
+// the crate, and the catalogue of covers picks which one.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { copy, pick } from './lib/copy.js';
+import { Film, inQuad, matrix3dFor, pickVariant } from './lib/film.js';
 import { toggle } from './lib/music.js';
-import { Sequence, inQuad, matrix3dFor, pickVariant } from './lib/sequence.js';
 
 const LABELS = ['base', 'platter', 'disc', 'arm'];
 const TRACKS = ['A1', 'A2', 'A3', 'A4', 'B1', 'B2'];
+const FLOORS = 6;
+const PROJECTS = 4;
 const ART = 600; // px size of the cover layer before it is mapped onto the sleeve
 
 function initialLang() {
@@ -44,6 +45,15 @@ const host = (url) => {
   }
 };
 
+function Floor({ i, floor, className = '', children }) {
+  const on = floor === i;
+  return (
+    <section className={`floor ${className} ${on ? 'on' : floor > i ? 'above' : 'below'}`} inert={on ? undefined : ''} aria-hidden={!on}>
+      {children}
+    </section>
+  );
+}
+
 export default function App() {
   const [lang, setLangState] = useState(initialLang);
   const t = copy[lang];
@@ -56,18 +66,24 @@ export default function App() {
 
   const [reduce] = useState(() => matchMedia('(prefers-reduced-motion: reduce)').matches);
   const [ready, setReady] = useState(false);
-  const [beat, setBeat] = useState(0);
+  const [floor, setFloor] = useState(0);
   const [current, setCurrent] = useState(0);
+  const [busy, setBusy] = useState(false);
   const [playing, setPlaying] = useState(false);
   const [toast, setToast] = useState('');
 
   const canvasRef = useRef(null);
-  const lenisRef = useRef(null);
+  const filmRef = useRef(null);
   const labelRefs = useRef({});
   const frameRef = useRef(null);
-  const seqRef = useRef(null);
   const artRef = useRef(null);
+  const floorRef = useRef(0);
   const currentRef = useRef(0);
+  const busyRef = useRef(false);
+  const lock = (v) => {
+    busyRef.current = v;
+    setBusy(v);
+  };
 
   const setLang = (next) => {
     setLangState(next);
@@ -94,27 +110,21 @@ export default function App() {
   const musicRef = useRef(music);
   musicRef.current = music;
 
-  // Film + smooth scroll. Labels and the record's click area follow anchors exported from Blender.
+  // The film. Labels and the record's click area follow anchors exported from Blender.
   useEffect(() => {
     let cancelled = false;
-    let seq;
-    let lenis;
+    let film;
     fetch('/frames/manifest.json')
       .then((r) => r.json())
       .then((manifest) => {
         if (cancelled) return;
-        lenis = reduce ? null : new Lenis({ autoRaf: false, lerp: 0.075, smoothWheel: true, wheelMultiplier: 0.85 });
-        lenisRef.current = lenis;
         const variant = pickVariant();
         const teardown = (manifest[variant.name] || manifest.wide).beats[2] - 1;
-        seq = new Sequence(canvasRef.current, {
+        film = new Film(canvasRef.current, {
           manifest,
           variant,
-          lenis,
           reduce,
           onReady: () => setReady(true),
-          onEnter: () => seq.lift(),
-          onLeave: () => setBusy(false),
           onFrame: (at) => {
             frameRef.current = at;
             const show = at.seq === 'f' ? Math.max(0, 1 - Math.abs(at.f - teardown) / 12) : 0;
@@ -135,17 +145,111 @@ export default function App() {
             }
           },
         });
-        seqRef.current = seq;
+        filmRef.current = film;
       })
       .catch(() => {});
     return () => {
       cancelled = true;
-      seq?.dispose();
-      lenis?.destroy();
+      film?.dispose();
     };
   }, [reduce]);
 
-  const [busy, setBusy] = useState(false);
+  // Floors: the film travels to the floor's beat; the projects floor then pulls a record out.
+  const goFloor = useCallback((j) => {
+    const to = Math.max(0, Math.min(FLOORS - 1, j));
+    const from = floorRef.current;
+    if (to === from || busyRef.current) return;
+    const film = filmRef.current;
+    lock(true);
+    floorRef.current = to;
+    setFloor(to);
+    const arrive = () => {
+      if (to === PROJECTS && film?.m.loop) film.lift(() => lock(false));
+      else lock(false);
+    };
+    const travel = () => {
+      if (!film) return arrive();
+      film.travel(film.beats[to] ?? film.beats[film.beats.length - 1], arrive);
+    };
+    if (from === PROJECTS && film?.mode === 'l') film.putBack(travel);
+    else travel();
+  }, []);
+  const goRef = useRef(goFloor);
+  goRef.current = goFloor;
+
+  // Change record: the current one goes back into the crate, the cover swaps while the sleeve's
+  // face is hidden, and the next one is pulled out.
+  const goProject = useCallback((i) => {
+    const n = projects.length;
+    if (!n || busyRef.current) return;
+    const next = ((i % n) + n) % n;
+    if (next === currentRef.current) return;
+    const film = filmRef.current;
+    if (!film || floorRef.current !== PROJECTS || film.mode !== 'l') {
+      currentRef.current = next;
+      setCurrent(next);
+      return;
+    }
+    lock(true);
+    film.putBack(() => {
+      currentRef.current = next;
+      setCurrent(next);
+      film.lift(() => lock(false));
+    });
+  }, [projects.length]);
+  const goProjectRef = useRef(goProject);
+  goProjectRef.current = goProject;
+
+  // One wheel notch, one swipe or one key = one floor.
+  useEffect(() => {
+    let cool = 0;
+    const stepFloor = (d) => {
+      const now = performance.now();
+      if (now < cool) return;
+      cool = now + 900;
+      goRef.current(floorRef.current + d);
+    };
+    const onWheel = (e) => {
+      const box = e.target.closest?.('[data-scroll]');
+      if (box && box.scrollHeight > box.clientHeight + 2) return; // a panel that scrolls on its own
+      if (Math.abs(e.deltaY) < 12) return;
+      e.preventDefault();
+      stepFloor(e.deltaY > 0 ? 1 : -1);
+    };
+    let y0 = null;
+    const onTouchStart = (e) => (y0 = e.touches[0].clientY);
+    const onTouchEnd = (e) => {
+      if (y0 == null) return;
+      const dy = y0 - e.changedTouches[0].clientY;
+      y0 = null;
+      if (Math.abs(dy) > 50) stepFloor(dy > 0 ? 1 : -1);
+    };
+    const onKey = (e) => {
+      if (e.target.closest?.('input, textarea, select')) return;
+      const map = { ArrowDown: 1, PageDown: 1, ' ': 1, ArrowUp: -1, PageUp: -1 };
+      if (e.key in map) {
+        e.preventDefault();
+        stepFloor(map[e.key]);
+      } else if (floorRef.current === PROJECTS && (e.key === 'ArrowRight' || e.key === 'ArrowLeft')) {
+        e.preventDefault();
+        goProjectRef.current(currentRef.current + (e.key === 'ArrowRight' ? 1 : -1));
+      }
+    };
+    window.addEventListener('wheel', onWheel, { passive: false });
+    window.addEventListener('touchstart', onTouchStart, { passive: true });
+    window.addEventListener('touchend', onTouchEnd, { passive: true });
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('wheel', onWheel);
+      window.removeEventListener('touchstart', onTouchStart);
+      window.removeEventListener('touchend', onTouchEnd);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, []);
+
+  const openProject = useCallback((p) => p && window.open(`${main}/projets/${p.slug}`, '_blank', 'noopener'), [main]);
+  const openRef = useRef(() => {});
+  openRef.current = () => openProject(projects[currentRef.current]);
 
   // Clicks on the film: the record (centre and rim come from the film) starts the mix; the lifted
   // sleeve opens the project.
@@ -178,66 +282,6 @@ export default function App() {
       window.removeEventListener('pointermove', move);
     };
   }, []);
-
-  // Which section is on screen (tracklist highlight).
-  useEffect(() => {
-    const els = [...document.querySelectorAll('[data-track]')];
-    const io = new IntersectionObserver(
-      (entries) => {
-        for (const e of entries) if (e.isIntersecting) setBeat(Number(e.target.dataset.track));
-      },
-      { rootMargin: '-45% 0px -45% 0px' },
-    );
-    els.forEach((el) => io.observe(el));
-    return () => io.disconnect();
-  }, [projects.length]);
-
-  const openProject = useCallback((p) => p && window.open(`${main}/projets/${p.slug}`, '_blank', 'noopener'), [main]);
-  const openRef = useRef(() => {});
-  openRef.current = () => openProject(projects[currentRef.current]);
-
-  // Change record: the current one goes back into the crate, the cover swaps while the sleeve's
-  // face is hidden, and the next one is pulled out.
-  const goProject = useCallback((i) => {
-    const n = projects.length;
-    if (!n || busy) return;
-    const next = ((i % n) + n) % n;
-    if (next === currentRef.current) return;
-    const seq = seqRef.current;
-    if (!seq || !seq.player.inside) {
-      currentRef.current = next;
-      setCurrent(next);
-      return;
-    }
-    setBusy(true);
-    seq.putBack(() => {
-      currentRef.current = next;
-      setCurrent(next);
-      seq.lift(() => setBusy(false));
-    });
-  }, [projects.length, busy]);
-  const goRef = useRef(goProject);
-  goRef.current = goProject;
-
-  // ← → keys browse the crate while it is on screen.
-  useEffect(() => {
-    const onKey = (e) => {
-      if (!seqRef.current?.player.inside || e.target.closest?.('input, textarea')) return;
-      if (e.key === 'ArrowRight') goRef.current(currentRef.current + 1);
-      else if (e.key === 'ArrowLeft') goRef.current(currentRef.current - 1);
-      else return;
-      e.preventDefault();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, []);
-
-  const go = (i) => {
-    const el = document.querySelector(`[data-track="${i}"]`);
-    if (!el) return;
-    if (lenisRef.current) lenisRef.current.scrollTo(el, { duration: 1.4 });
-    else el.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth' });
-  };
 
   const links = (settings.links || []).filter((l) => l.url);
   const email = settings.email;
@@ -285,12 +329,12 @@ export default function App() {
           <span className="muted">.millot</span>
           <span className="badge">3D</span>
         </a>
-        <nav className={`tracks ${beat >= 4 ? 'away' : ''}`} aria-label="Sections">
-          <span className="side mono">{t.side(beat)}</span>
+        <nav className={`tracks ${floor >= 5 ? 'away' : ''}`} aria-label="Sections">
+          <span className="side mono">{t.side(floor)}</span>
           <ol>
             {names.map((name, i) => (
               <li key={name}>
-                <button type="button" className={beat === i ? 'on' : ''} onClick={() => go(i)} aria-current={beat === i ? 'true' : undefined}>
+                <button type="button" className={floor === i ? 'on' : ''} onClick={() => goFloor(i)} aria-current={floor === i ? 'true' : undefined}>
                   <span className="mono">{TRACKS[i]}</span> {name}
                 </button>
               </li>
@@ -310,8 +354,20 @@ export default function App() {
       </header>
       {toast && <p className="toast mono" role="status">{toast}</p>}
 
-      <main id="main">
-        <section className="beat intro" data-beat data-track="0">
+      {/* Floor dots on the right edge (small screens) + the next-floor button */}
+      <nav className="dots" aria-label={lang === 'fr' ? 'Étages' : 'Floors'} data-ui>
+        {names.map((name, i) => (
+          <button key={name} type="button" className={floor === i ? 'on' : ''} onClick={() => goFloor(i)} aria-label={name} aria-current={floor === i ? 'true' : undefined} />
+        ))}
+      </nav>
+      {floor < FLOORS - 1 && (
+        <button type="button" className="next mono" onClick={() => goFloor(floor + 1)} data-ui>
+          <span>{names[floor + 1]}</span> ↓
+        </button>
+      )}
+
+      <main id="main" className="floors">
+        <Floor i={0} floor={floor} className="intro">
           <div className="copy">
             <p className="mono prompt"><span className="sky">~/antoine</span> $ {t.intro.prompt}<span className="caret" /></p>
             <h1>
@@ -320,22 +376,22 @@ export default function App() {
             </h1>
             <p className="sub">{pick(settings.tagline, lang) || t.intro.sub}</p>
             <div className="row">
-              <button type="button" className="btn primary" onClick={() => go(4)}>{names[4]} ↓</button>
+              <button type="button" className="btn primary" onClick={() => goFloor(PROJECTS)}>{names[PROJECTS]} ↓</button>
               <button type="button" className="btn" onClick={music}>{playing ? t.pause : t.play}</button>
             </div>
             <p className="mono hint">{t.intro.hint}</p>
           </div>
-        </section>
+        </Floor>
 
-        <section className="beat slow" data-beat data-track="1">
+        <Floor i={1} floor={floor}>
           <div className="copy">
             <p className="kicker mono">{t.needle.kicker}</p>
             <h2>{t.needle.title}</h2>
             <p className="sub">{t.needle.body}</p>
           </div>
-        </section>
+        </Floor>
 
-        <section className="beat tall" data-beat data-track="2">
+        <Floor i={2} floor={floor} className="top">
           <div className="copy">
             <p className="kicker mono">{t.layers.kicker}</p>
             <h2>{t.layers.title}</h2>
@@ -347,9 +403,9 @@ export default function App() {
               ))}
             </ul>
           </div>
-        </section>
+        </Floor>
 
-        <section className="beat end slow" data-beat data-track="3">
+        <Floor i={3} floor={floor} className="end">
           <div className="copy">
             <p className="kicker mono">{t.numbers.kicker}</p>
             <h2>{t.numbers.title}</h2>
@@ -366,54 +422,46 @@ export default function App() {
               ))}
             </dl>
           </div>
-        </section>
+        </Floor>
 
-        <section className="projects" data-beat data-track="4" aria-labelledby="projects-title">
-          <div className="sticky">
-            <div className="copy panel" data-ui>
-              <p className="kicker mono">
-                {t.crate.kicker} · <span className="amber">{String(current + 1).padStart(2, '0')}</span>/{String(projects.length).padStart(2, '0')}
-              </p>
-              <h2 id="projects-title" className="sr-only">{t.crate.title}</h2>
-              {p ? (
-                <div key={p.slug} className="card-info">
-                  <p className="mono muted">{pick(p.sector, lang)}</p>
-                  <h3>{pick(p.title, lang)}</h3>
-                  <p className="sub">{pick(p.tagline, lang)}</p>
-                  {p.result && <p className="result mono">{pick(p.result, lang)}</p>}
-                  <ul className="tags">{(p.tags || []).slice(0, 5).map((tag) => <li key={tag}>{tag}</li>)}</ul>
-                </div>
-              ) : (
-                <h3>{t.crate.title}</h3>
-              )}
-              <div className="row">
-                {p && <a className="btn primary" href={`${main}/projets/${p.slug}`} target="_blank" rel="noreferrer">{t.crate.open} ↗</a>}
-                <button type="button" className="btn icon" aria-label={t.crate.prev} disabled={busy} onClick={() => goProject(current - 1)}>←</button>
-                <button type="button" className="btn icon" aria-label={t.crate.next} disabled={busy} onClick={() => goProject(current + 1)}>→</button>
+        <Floor i={PROJECTS} floor={floor} className="projects">
+          <div className="copy panel" data-ui data-scroll>
+            <p className="kicker mono">
+              {t.crate.kicker} · <span className="amber">{String(current + 1).padStart(2, '0')}</span>/{String(projects.length).padStart(2, '0')}
+            </p>
+            {p ? (
+              <div key={p.slug} className="card-info">
+                <p className="mono muted">{pick(p.sector, lang)}</p>
+                <h2>{pick(p.title, lang)}</h2>
+                <p className="sub">{pick(p.tagline, lang)}</p>
+                {p.result && <p className="result mono">{pick(p.result, lang)}</p>}
               </div>
-              <ol className="numbers" aria-label={t.crate.title}>
-                {projects.map((proj, i) => (
-                  <li key={proj.slug}>
-                    <button type="button" className={i === current ? 'on' : ''} disabled={busy} onClick={() => goProject(i)} aria-current={i === current ? 'true' : undefined} title={pick(proj.title, lang)}>
-                      {String(i + 1).padStart(2, '0')}
-                    </button>
-                  </li>
-                ))}
-              </ol>
-              <p className="mono hint">{t.crate.hint}</p>
+            ) : (
+              <h2>{t.crate.title}</h2>
+            )}
+            <div className="row">
+              {p && <a className="btn primary" href={`${main}/projets/${p.slug}`} target="_blank" rel="noreferrer">{t.crate.open} ↗</a>}
+              <button type="button" className="btn icon" aria-label={t.crate.prev} disabled={busy} onClick={() => goProject(current - 1)}>←</button>
+              <button type="button" className="btn icon" aria-label={t.crate.next} disabled={busy} onClick={() => goProject(current + 1)}>→</button>
             </div>
+            {/* The catalogue: every cover; click one to pull it out of the crate */}
+            <ol className="catalogue" aria-label={t.crate.title}>
+              {projects.map((proj, i) => (
+                <li key={proj.slug}>
+                  <button type="button" className={i === current ? 'on' : ''} disabled={busy} onClick={() => goProject(i)} aria-current={i === current ? 'true' : undefined} title={pick(proj.title, lang)}>
+                    {coverOf(proj, lang) ? <img src={coverOf(proj, lang)} alt="" loading="lazy" decoding="async" width="160" height="100" /> : <span className="thumb-blank" />}
+                    <span className="mono">{String(i + 1).padStart(2, '0')}</span>
+                    <span className="sr-only">{pick(proj.title, lang)}</span>
+                  </button>
+                </li>
+              ))}
+            </ol>
+            <p className="mono hint">{t.crate.hint}</p>
           </div>
-          <div data-loop-end className="marker end" />
-          {/* All the projects, for keyboard and screen-reader users */}
-          <ul className="sr-only">
-            {projects.map((proj) => (
-              <li key={proj.slug}><a href={`${main}/projets/${proj.slug}`} target="_blank" rel="noreferrer">{pick(proj.title, lang)}</a></li>
-            ))}
-          </ul>
-        </section>
+        </Floor>
 
-        <section className="beat contact" data-contact data-track="5">
-          <div className="copy">
+        <Floor i={5} floor={floor} className="contact">
+          <div className="copy" data-scroll>
             <p className="kicker mono">{t.contact.kicker}</p>
             <h2>{t.contact.title}</h2>
             <p className="sub">{t.contact.body}</p>
@@ -435,7 +483,7 @@ export default function App() {
             <a className="classic" href={main} target="_blank" rel="noreferrer">{t.contact.classic} →</a>
             <p className="mono muted foot">© {new Date().getFullYear()} Antoine Millot · Data & AI · {lang === 'fr' ? 'Rendu Blender Cycles' : 'Rendered in Blender Cycles'}</p>
           </div>
-        </section>
+        </Floor>
       </main>
     </div>
   );

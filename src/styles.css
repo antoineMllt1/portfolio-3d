@@ -23,7 +23,9 @@ body {
   color: var(--ink);
   font: 400 16px/1.55 Inter, ui-sans-serif, system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
-  overflow-x: clip;
+  overflow: hidden;
+  height: 100vh;
+  height: 100dvh;
 }
 h1,
 h2,
@@ -358,58 +360,136 @@ button {
   font-weight: 600;
 }
 
-/* ---------- Beats ---------- */
-main {
-  position: relative;
+/* ---------- Floors ---------- */
+main.floors {
+  position: fixed;
+  inset: 0;
   z-index: 10;
-  pointer-events: none; /* clicks reach the 3D record; real controls opt back in */
+  pointer-events: none; /* clicks reach the film; real controls opt back in */
 }
 main a,
 main button,
 main .panel,
-main .grid,
-main .links {
+main .links,
+main [data-scroll] {
   pointer-events: auto;
 }
-.beat {
-  min-height: 100vh;
-  min-height: 100svh;
+.floor {
+  position: absolute;
+  inset: 0;
   display: flex;
   align-items: center;
-  padding: 96px var(--gutter);
+  padding: 88px var(--gutter) 72px;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.55s ease, transform 0.7s cubic-bezier(0.2, 0.8, 0.2, 1), visibility 0s linear 0.55s;
 }
-.beat.slow {
-  min-height: 190vh;
+.floor.on {
+  opacity: 1;
+  visibility: visible;
+  transform: none;
+  transition: opacity 0.6s ease 0.35s, transform 0.8s cubic-bezier(0.2, 0.8, 0.2, 1) 0.35s;
 }
-.beat.tall {
-  min-height: 220vh;
+.floor.above {
+  transform: translateY(-36px);
+}
+.floor.below {
+  transform: translateY(36px);
+}
+.floor.top {
   align-items: flex-start;
-  padding-top: 30vh;
+  padding-top: 20vh;
 }
-.beat.end {
+.floor.end {
   justify-content: flex-end;
 }
 .copy {
   width: min(100%, 520px);
 }
-.copy.wide {
-  width: 100%;
-  max-width: 1200px;
-  margin: 0 auto;
+.copy[data-scroll] {
+  max-height: 100%;
+  overflow: auto;
+  overscroll-behavior: contain;
 }
 @media (max-aspect-ratio: 9/10) {
-  .beat {
+  .floor {
     align-items: flex-end;
-    padding-bottom: 56px;
+    padding-bottom: 72px;
   }
-  .beat.tall {
+  .floor.top {
     align-items: flex-end;
-    padding-top: 96px;
   }
-  .beat.end {
+  .floor.end {
     justify-content: flex-start;
   }
 }
+
+/* Floor dots on the right edge, and the "next floor" button */
+.dots {
+  position: fixed;
+  right: max(14px, calc(var(--gutter) - 10px));
+  top: 50%;
+  z-index: 20;
+  display: grid;
+  gap: 10px;
+  transform: translateY(-50%);
+}
+.dots button {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+.dots button::before {
+  content: '';
+  display: block;
+  width: 6px;
+  height: 6px;
+  margin: 9px auto;
+  border-radius: 50%;
+  background: rgb(233 238 247 / 0.35);
+  transition: transform 0.25s, background-color 0.25s;
+}
+.dots button.on::before {
+  background: var(--amber);
+  transform: scale(1.5);
+}
+@media (min-width: 1100px) and (min-height: 640px) {
+  .dots {
+    display: none; /* the tracklist is there */
+  }
+}
+.next {
+  position: fixed;
+  left: 50%;
+  bottom: max(18px, env(safe-area-inset-bottom));
+  z-index: 20;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 0 12px;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transform: translateX(-50%);
+  animation: nudge 2.4s ease-in-out infinite;
+}
+.next:hover {
+  color: var(--ink);
+}
+@keyframes nudge {
+  50% {
+    transform: translate(-50%, 4px);
+  }
+}
+
 .prompt {
   font-size: 13.5px;
   color: var(--muted);
@@ -626,43 +706,78 @@ h2 {
   margin-right: 6px;
 }
 
-/* Projects: sticky panel on the left, the crate film behind */
-.projects {
-  position: relative;
-  height: 190vh;
-  height: 190svh;
-}
-.sticky {
-  position: sticky;
-  top: 0;
-  height: 100vh;
-  height: 100svh;
-  display: flex;
-  align-items: center;
-  padding: 96px var(--gutter);
-}
-.marker {
-  position: absolute;
-  left: 0;
-  height: 0;
-}
-.marker.end {
-  bottom: 100vh;
-  bottom: 100svh;
-}
+/* Projects: the panel with the catalogue, the crate film behind */
 .panel {
-  padding: 26px;
+  max-height: 100%;
+  padding: 22px 24px;
   border: 1px solid var(--line);
   border-radius: 10px;
-  background: rgb(3 4 7 / 0.72);
+  background: rgb(3 4 7 / 0.74);
+  overflow: auto;
+  overscroll-behavior: contain;
 }
-.panel h3 {
-  margin: 6px 0 0;
-  font-size: clamp(1.7rem, 3vw, 2.5rem);
-  font-weight: 700;
-  line-height: 1.02;
-  letter-spacing: -0.03em;
-  text-wrap: balance;
+.panel h2 {
+  margin-top: 6px;
+  font-size: clamp(1.5rem, 2.6vw, 2.1rem);
+}
+.catalogue {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin: 18px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.catalogue button {
+  position: relative;
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: #0d1424;
+  overflow: hidden;
+  cursor: pointer;
+  aspect-ratio: 16 / 10;
+  transition: border-color 0.2s, transform 0.2s;
+}
+.catalogue img,
+.thumb-blank {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0.75;
+  transition: opacity 0.2s;
+}
+.catalogue button:hover {
+  border-color: rgb(233 238 247 / 0.4);
+  transform: translateY(-2px);
+}
+.catalogue button:hover img,
+.catalogue button.on img {
+  opacity: 1;
+}
+.catalogue button.on {
+  border-color: var(--amber);
+  box-shadow: 0 0 0 1px var(--amber);
+}
+.catalogue .mono {
+  position: absolute;
+  left: 6px;
+  bottom: 5px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: rgb(3 4 7 / 0.75);
+  color: var(--ink);
+  font-size: 10.5px;
+}
+.catalogue button.on .mono {
+  background: var(--amber);
+  color: var(--navy);
+}
+.catalogue button:disabled {
+  cursor: default;
 }
 .card-info {
   animation: in 0.35s cubic-bezier(0.2, 0.8, 0.2, 1);
@@ -687,65 +802,19 @@ h2 {
   font-size: 13.5px;
   font-weight: 600;
 }
-.tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin: 16px 0 0;
-  padding: 0;
-  list-style: none;
-}
-.numbers {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  margin: 18px 0 0;
-  padding: 0;
-  list-style: none;
-}
-.numbers button {
-  min-width: 34px;
-  height: 30px;
-  padding: 0 6px;
-  border: 1px solid var(--line);
-  border-radius: var(--r-sm);
-  background: none;
-  color: var(--muted);
-  font: 500 12px/1 'JetBrains Mono', monospace;
-  cursor: pointer;
-  transition: color 0.2s, border-color 0.2s, background-color 0.2s;
-}
-.numbers button:hover {
-  color: var(--ink);
-  border-color: rgb(233 238 247 / 0.35);
-}
-.numbers button.on {
-  background: var(--amber);
-  border-color: var(--amber);
-  color: var(--navy);
-}
-.numbers button:disabled {
-  cursor: default;
-}
-.tags li {
-  padding: 3px 8px;
-  border: 1px solid var(--line);
-  border-radius: var(--r-sm);
-  font: 500 12px/1.5 'JetBrains Mono', monospace;
-  color: #c3ccdc;
-}
 @media (max-aspect-ratio: 9/10) {
-  .sticky {
-    align-items: flex-end;
-    padding-bottom: 24px;
-  }
   .panel {
-    padding: 18px;
+    padding: 14px 16px;
   }
   .card-info .sub,
-  .panel .hint,
-  .numbers,
-  .tags {
+  .panel .hint {
+    display: none;
+  }
+  .catalogue {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 5px;
+  }
+  .catalogue .mono {
     display: none;
   }
 }
