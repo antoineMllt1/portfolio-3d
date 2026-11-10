@@ -1,0 +1,107 @@
+// Static copy (FR / EN). Projects, certifications and contact details come from the main portfolio.
+export const copy = {
+  fr: {
+    langSwitch: 'Switch to English',
+    skip: 'Aller au contenu',
+    classic: 'Version classique',
+    tracks: ['Intro', 'Tête de lecture', 'Démontage', 'Les chiffres', 'Les projets', '', 'Face B'],
+    side: (b) => (b < 4 ? 'Face A' : 'Face B'),
+    play: 'Lancer le mix',
+    pause: 'Mettre en pause',
+    soon: 'Mix bientôt',
+    intro: {
+      prompt: 'play --side A',
+      name: 'Antoine Millot',
+      line: 'Data Analyst & AI Engineer.',
+      sub: 'Je transforme la donnée en décisions et les tâches répétitives en workflows automatisés : dashboards, agents IA et outils sur mesure.',
+      hint: 'Fais défiler pour lancer le film · clique sur le vinyle pour la musique',
+    },
+    needle: {
+      kicker: 'A2 · Tête de lecture',
+      title: 'Je lis la donnée, j’en sors un signal.',
+      body: 'En alternance chez Sage (2026–2027) comme Data Analyst CSM / AI Engineer, en Bachelor AI Applied to Business à Eugenia School. Basé à Paris, bilingue français / anglais.',
+    },
+    layers: {
+      kicker: 'A3 · Démontage',
+      title: 'Quatre couches, une seule machine.',
+      body: 'Un projet utile, c’est une base solide, un moteur, ce qu’on joue, et quelqu’un qui écoute.',
+      labels: {
+        base: ['Data', 'SQL, Python, Power BI, Looker : la base qui tient tout.'],
+        platter: ['IA', 'Agents, RAG, LLM : le moteur qui fait tourner.'],
+        disc: ['Automatisation', 'n8n, Make, API : ce qui tourne tout seul.'],
+        arm: ['Impact', 'Le besoin métier, lu de près, transformé en résultat.'],
+      },
+    },
+    numbers: {
+      kicker: 'A4 · Les chiffres',
+      title: 'Ce qui est déjà sorti.',
+      projects: 'projets livrés',
+      certs: 'certifications',
+      sectors: 'secteurs d’activité',
+    },
+    crate: {
+      kicker: 'B1 · Les projets',
+      title: 'Les projets qui tournent.',
+    },
+    contact: {
+      kicker: 'B2 · Face B',
+      title: 'On lance le prochain projet ?',
+      body: 'Un process qui prend trop de temps, une donnée qu’on n’exploite pas, une idée d’agent IA : écris-moi.',
+      linkedin: 'LinkedIn',
+      classic: 'Voir le portfolio complet',
+    },
+  },
+  en: {
+    langSwitch: 'Passer en français',
+    skip: 'Skip to content',
+    classic: 'Classic version',
+    tracks: ['Intro', 'The needle', 'Teardown', 'The numbers', 'The projects', '', 'Side B'],
+    side: (b) => (b < 4 ? 'Side A' : 'Side B'),
+    play: 'Play the mix',
+    pause: 'Pause',
+    soon: 'Mix coming soon',
+    intro: {
+      prompt: 'play --side A',
+      name: 'Antoine Millot',
+      line: 'Data Analyst & AI Engineer.',
+      sub: 'I turn data into decisions and repetitive tasks into automated workflows: dashboards, AI agents and custom tools.',
+      hint: 'Scroll to play the film · click the record for music',
+    },
+    needle: {
+      kicker: 'A2 · The needle',
+      title: 'I read the data and pull out the signal.',
+      body: 'Apprentice at Sage (2026–2027) as a Data Analyst CSM / AI Engineer, studying for a Bachelor in AI Applied to Business at Eugenia School. Based in Paris, bilingual French / English.',
+    },
+    layers: {
+      kicker: 'A3 · Teardown',
+      title: 'Four layers, one machine.',
+      body: 'A useful project needs a solid base, an engine, something to play, and someone listening.',
+      labels: {
+        base: ['Data', 'SQL, Python, Power BI, Looker: the base that holds it all.'],
+        platter: ['AI', 'Agents, RAG, LLMs: the engine that makes it turn.'],
+        disc: ['Automation', 'n8n, Make, APIs: what runs on its own.'],
+        arm: ['Impact', 'The business need, read up close, turned into results.'],
+      },
+    },
+    numbers: {
+      kicker: 'A4 · The numbers',
+      title: 'Already released.',
+      projects: 'projects shipped',
+      certs: 'certifications',
+      sectors: 'industries',
+    },
+    crate: {
+      kicker: 'B1 · The projects',
+      title: 'What’s been playing.',
+    },
+    contact: {
+      kicker: 'B2 · Side B',
+      title: 'Shall we start the next one?',
+      body: 'A process that takes too long, data nobody uses, an idea for an AI agent: write to me.',
+      linkedin: 'LinkedIn',
+      classic: 'See the full portfolio',
+    },
+  },
+};
+
+export const pick = (obj, lang) => (typeof obj === 'string' ? obj : obj?.[lang] || obj?.fr || obj?.en || '');
