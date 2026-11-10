@@ -67,6 +67,7 @@ scene.cycles.caustics_reflective = False
 scene.cycles.caustics_refractive = False
 scene.cycles.blur_glossy = 0.3
 scene.cycles.sample_clamp_indirect = 6
+scene.render.use_persistent_data = True  # keep the BVH and the images between frames
 scene.render.resolution_x, scene.render.resolution_y = (1600, 900) if WIDE else (1080, 1920)
 scene.render.resolution_percentage = args.scale
 scene.render.image_settings.file_format = 'PNG'
@@ -132,7 +133,7 @@ light('Fill', 'AREA', (0.6, -2.6, 1.6), (0.2, 0, 0.8), 14, (1.0, 0.85, 0.7), siz
 # ---------------------------------------------------------------- camera
 cam_data = bpy.data.cameras.new('Cam')
 cam_data.sensor_width = 36
-cam_data.sensor_height = 24
+cam_data.sensor_height = 36  # phones: the 36 mm side is the long one
 cam_data.sensor_fit = 'HORIZONTAL' if WIDE else 'VERTICAL'
 cam_data.clip_start, cam_data.clip_end = 0.02, 50
 cam_data.dof.use_dof = True
@@ -160,17 +161,18 @@ if WIDE:
     SHOTS = [
         dict(pos=V((-0.60, -1.46, 1.27)), tgt=V((-0.235, -0.02, 0.80)), lens=50, f=4.0, focus=V((0.0, -0.1, 0.8))),
         dict(pos=STYLUS + V((-0.17, -0.21, 0.085)), tgt=STYLUS + V((-0.028, 0.012, -0.004)), lens=85, f=4.0, focus=STYLUS),
-        dict(pos=V((-0.56, -0.46, 0.905)), tgt=V((-0.245, -0.125, 0.782)), lens=70, f=4.5, focus=V((-0.178, -0.16, 0.775))),
-        dict(pos=V((0.48, -1.58, 1.40)), tgt=V((0.51, -0.02, 0.955)), lens=50, f=5.0, focus=C + V((0, -0.06, 0.4))),
-        dict(pos=V((-0.02, -2.4, 1.14)), tgt=V((0.1, 0.0, 0.95)), lens=40, f=4.0, focus=T + V((0, 0, 0.1))),
+        dict(pos=V((-0.56, -0.46, 0.93)), tgt=V((-0.245, -0.125, 0.80)), lens=70, f=4.5, focus=V((-0.178, -0.16, 0.775))),
+        dict(pos=V((0.48, -1.70, 1.43)), tgt=V((0.51, -0.02, 0.995)), lens=50, f=5.0, focus=C + V((0, -0.06, 0.4))),
+        dict(pos=V((-0.10, -2.85, 1.16)), tgt=V((0.0, 0.0, 0.96)), lens=40, f=4.0, focus=T + V((0, 0, 0.1))),
     ]
 else:
+    # Phones: the object sits in the upper half, the text below it.
     SHOTS = [
-        dict(pos=V((-0.35, -1.75, 1.55)), tgt=V((0.0, -0.02, 0.56)), lens=55, f=4.0, focus=V((0.0, -0.1, 0.8))),
-        dict(pos=STYLUS + V((-0.16, -0.30, 0.13)), tgt=STYLUS + V((0.0, 0.01, -0.07)), lens=85, f=3.2, focus=STYLUS),
-        dict(pos=V((-0.50, -0.62, 0.90)), tgt=V((-0.13, -0.13, 0.68)), lens=70, f=2.8, focus=V((-0.17, -0.165, 0.775))),
-        dict(pos=V((0.58, -1.25, 1.42)), tgt=V((0.58, -0.02, 0.62)), lens=55, f=4.5, focus=C + V((0, -0.06, 0.26))),
-        dict(pos=V((0.2, -2.9, 1.35)), tgt=V((0.2, 0.0, 0.45)), lens=45, f=4.0, focus=T + V((0, 0, 0.1))),
+        dict(pos=V((-0.30, -1.62, 1.50)), tgt=V((0.0, -0.02, 0.58)), lens=50, f=4.0, focus=V((0.0, -0.1, 0.8))),
+        dict(pos=STYLUS + V((-0.11, -0.31, 0.15)), tgt=STYLUS + V((0.0, 0.01, -0.065)), lens=85, f=4.0, focus=STYLUS),
+        dict(pos=V((-0.47, -0.62, 0.99)), tgt=V((-0.15, -0.13, 0.69)), lens=70, f=4.5, focus=V((-0.178, -0.16, 0.775))),
+        dict(pos=V((0.72, -1.74, 1.40)), tgt=V((0.72, -0.02, 0.74)), lens=50, f=5.0, focus=C + V((0, -0.06, 0.4))),
+        dict(pos=V((0.33, -3.1, 1.32)), tgt=V((0.33, 0.0, 0.52)), lens=50, f=4.0, focus=T + V((0, 0, 0.1))),
     ]
 
 

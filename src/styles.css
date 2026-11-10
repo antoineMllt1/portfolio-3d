@@ -603,6 +603,8 @@ h2 {
   font-weight: 500;
 }
 .links .mono {
+  flex: none;
+  white-space: nowrap;
   font-size: 11.5px;
   color: var(--muted);
   transition: color 0.2s;
@@ -624,14 +626,6 @@ h2 {
   .rail-name {
     display: none;
   }
-  .rail {
-    right: 12px;
-  }
-  .rail button {
-    height: 26px;
-    width: 34px;
-    justify-content: flex-end;
-  }
 }
 @media (max-aspect-ratio: 9/10) {
   .scrim {
@@ -644,8 +638,53 @@ h2 {
   .counter {
     display: none;
   }
-  .next .mono {
+  .next {
     display: none;
+  }
+  /* The rail becomes a row of marks at the bottom */
+  .rail {
+    top: auto;
+    right: auto;
+    left: 50%;
+    bottom: max(14px, env(safe-area-inset-bottom));
+    display: flex;
+    gap: 2px;
+    transform: translateX(-50%);
+  }
+  .rail button {
+    width: 34px;
+    height: 44px;
+    justify-content: center;
+  }
+  .rail-mark,
+  .rail button.on .rail-mark {
+    width: 22px;
+  }
+  /* Less text on phones: the picture keeps the upper half */
+  h2 {
+    font-size: 1.7rem;
+  }
+  #profil .sub,
+  #contact .sub,
+  #contact .foot,
+  .pillars p {
+    display: none;
+  }
+  .pillars li {
+    padding: 10px 0;
+  }
+  .facts {
+    margin-top: 20px;
+  }
+  .facts div {
+    grid-template-columns: 84px 1fr;
+    padding: 10px 0;
+  }
+  .facts dd {
+    font-size: 14px;
+  }
+  .links {
+    margin-top: 20px;
   }
   .panel {
     width: 100%;
