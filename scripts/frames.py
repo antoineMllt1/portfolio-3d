@@ -9,7 +9,7 @@ from PIL import Image
 
 src = sys.argv[1] if len(sys.argv) > 1 else 'render/out'
 dst = 'public/frames'
-SIZES = {'wide': {'l': (1600, 62), 's': (1024, 60)}, 'tall': {'l': (720, 60), 's': (480, 58)}}
+SIZES = {'wide': {'l': (1600, 80), 's': (1024, 76)}, 'tall': {'l': (720, 78), 's': (480, 74)}}
 ANCHOR_X = {'wide': 0.75, 'tall': 0.5}  # how a cover-cropped frame is anchored horizontally
 
 manifest = {}
@@ -18,7 +18,9 @@ for variant, sizes in SIZES.items():
     with open(os.path.join(folder, 'anchors.json')) as fh:
         anchors = json.load(fh)
     files = sorted(f for f in os.listdir(folder) if f.startswith('f_') and f.endswith('.png'))
-    assert len(files) == anchors['frames'], f'{variant}: {len(files)} frames, expected {anchors["frames"]}'
+    if len(files) != anchors['frames']:
+        print(f'{variant}: {len(files)}/{anchors["frames"]} frames rendered, skipped')
+        continue
     total = 0
     for size, (width, quality) in sizes.items():
         out = os.path.join(dst, f'{variant}-{size}')

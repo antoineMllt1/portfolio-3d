@@ -15,8 +15,10 @@ export class Sequence {
   constructor(canvas, { manifest, variant, lenis, reduce, onFrame, onReady }) {
     this.canvas = canvas;
     this.ctx = canvas.getContext('2d', { alpha: false });
-    this.m = manifest[variant.name];
-    this.base = `/frames/${variant.name}-${variant.size}/`;
+    // Phones fall back to the desktop film if the portrait one is missing.
+    const name = manifest[variant.name] ? variant.name : 'wide';
+    this.m = manifest[name];
+    this.base = `/frames/${name}-${variant.size}/`;
     this.lenis = lenis;
     this.reduce = reduce;
     this.cb = { onFrame, onReady };

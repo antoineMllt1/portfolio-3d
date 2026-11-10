@@ -100,7 +100,7 @@ export default function App() {
         lenis = reduce ? null : new Lenis({ autoRaf: false, lerp: 0.1, smoothWheel: true });
         lenisRef.current = lenis;
         const variant = pickVariant();
-        const teardown = manifest[variant.name].beats[2] - 1;
+        const teardown = (manifest[variant.name] || manifest.wide).beats[2] - 1;
         seq = new Sequence(canvasRef.current, {
           manifest,
           variant,
@@ -203,7 +203,7 @@ export default function App() {
           <span className="muted">.millot</span>
           <span className="badge">3D</span>
         </a>
-        <nav className={`tracks ${beat >= 5 ? 'away' : ''}`} aria-label="Sections">
+        <nav className={`tracks ${beat >= 4 ? 'away' : ''}`} aria-label="Sections">
           <span className="side mono">{t.side(beat)}</span>
           <ol>
             {names.map((name, i) => (

@@ -225,9 +225,10 @@ button {
 /* Tracklist on the left edge */
 .tracks {
   position: fixed;
-  left: var(--gutter);
+  right: var(--gutter);
   bottom: 28px;
   display: none;
+  text-align: right;
 }
 .tracks {
   transition: opacity 0.3s;
@@ -248,17 +249,19 @@ button {
   list-style: none;
   margin: 0;
   padding: 0;
-  border-left: 1px solid var(--line);
+  border-right: 1px solid var(--line);
 }
 .tracks button {
   display: flex;
+  flex-direction: row-reverse;
   gap: 10px;
   min-height: 30px;
   align-items: center;
   padding: 0 12px;
-  margin-left: -1px;
+  margin-right: -1px;
+  margin-left: auto;
   border: 0;
-  border-left: 2px solid transparent;
+  border-right: 2px solid transparent;
   background: none;
   color: var(--muted);
   font-size: 13px;
@@ -274,7 +277,7 @@ button {
 }
 .tracks button.on {
   color: var(--ink);
-  border-left-color: var(--amber);
+  border-right-color: var(--amber);
 }
 @media (min-width: 1100px) and (min-height: 640px) {
   .tracks {
@@ -643,8 +646,7 @@ h2 {
     grid-template-columns: 1.4fr 1fr;
   }
   .grid .featured .thumb {
-    aspect-ratio: auto;
-    min-height: 100%;
+    align-self: center;
   }
   .grid .featured strong {
     font-size: 24px;
