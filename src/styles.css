@@ -55,6 +55,10 @@ button {
   outline: 2px solid var(--amber);
   outline-offset: 3px;
 }
+h1[tabindex],
+h2[tabindex] {
+  outline: none; /* focused programmatically when the floor changes; not interactive */
+}
 .skip {
   position: fixed;
   top: -60px;
@@ -198,13 +202,107 @@ button {
 }
 .brand {
   display: inline-flex;
-  align-items: baseline;
   gap: 1px;
   min-height: 44px;
   align-items: center;
-  text-decoration: none;
+  padding: 0;
+  border: 0;
+  background: none;
   font-weight: 600;
   letter-spacing: -0.01em;
+  cursor: pointer;
+}
+.progress {
+  position: fixed;
+  inset: 0 0 auto;
+  z-index: 30;
+  height: 2px;
+  background: var(--amber);
+  transform-origin: 0 0;
+  transition: transform 0.3s ease;
+}
+/* Floor indicator in the top bar */
+.floors-nav {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.floors-nav button {
+  width: 22px;
+  height: 40px;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+.floors-nav button::before {
+  content: '';
+  display: block;
+  width: 6px;
+  height: 6px;
+  margin: 0 auto;
+  border-radius: 50%;
+  background: rgb(233 238 247 / 0.3);
+  transition: transform 0.25s, background-color 0.25s;
+}
+.floors-nav button:hover::before {
+  background: rgb(233 238 247 / 0.7);
+}
+.floors-nav button.on::before {
+  background: var(--amber);
+  transform: scale(1.5);
+}
+.floor-name {
+  margin-left: 10px;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+  white-space: nowrap;
+}
+@media (max-width: 760px) {
+  .floor-name {
+    display: none;
+  }
+}
+@media (max-width: 480px) {
+  .floors-nav {
+    position: fixed;
+    right: 10px;
+    top: 50%;
+    flex-direction: column;
+    transform: translateY(-50%);
+  }
+  .floors-nav button {
+    width: 32px;
+    height: 24px;
+  }
+}
+.avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1px solid rgb(233 238 247 / 0.2);
+  box-shadow: 0 6px 18px -8px rgb(0 0 0 / 0.8);
+}
+h1 .name {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.who {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 20px;
+}
+.who span {
+  display: grid;
+  gap: 2px;
+}
+.who .mono {
+  font-size: 12px;
 }
 .badge {
   margin-left: 8px;
@@ -425,42 +523,6 @@ main [data-scroll] {
 }
 
 /* Floor dots on the right edge, and the "next floor" button */
-.dots {
-  position: fixed;
-  right: max(14px, calc(var(--gutter) - 10px));
-  top: 50%;
-  z-index: 20;
-  display: grid;
-  gap: 10px;
-  transform: translateY(-50%);
-}
-.dots button {
-  width: 24px;
-  height: 24px;
-  padding: 0;
-  border: 0;
-  background: none;
-  cursor: pointer;
-}
-.dots button::before {
-  content: '';
-  display: block;
-  width: 6px;
-  height: 6px;
-  margin: 9px auto;
-  border-radius: 50%;
-  background: rgb(233 238 247 / 0.35);
-  transition: transform 0.25s, background-color 0.25s;
-}
-.dots button.on::before {
-  background: var(--amber);
-  transform: scale(1.5);
-}
-@media (min-width: 1100px) and (min-height: 640px) {
-  .dots {
-    display: none; /* the tracklist is there */
-  }
-}
 .next {
   position: fixed;
   left: 50%;
@@ -515,7 +577,6 @@ h1 {
   line-height: 0.95;
 }
 h1 .name {
-  display: block;
   font-size: 17px;
   font-weight: 600;
   letter-spacing: -0.01em;
@@ -811,11 +872,13 @@ h2 {
     display: none;
   }
   .catalogue {
-    grid-template-columns: repeat(6, minmax(0, 1fr));
-    gap: 5px;
+    gap: 6px;
   }
   .catalogue .mono {
     display: none;
+  }
+  .floor-4 .next {
+    display: none; /* the panel sits there */
   }
 }
 

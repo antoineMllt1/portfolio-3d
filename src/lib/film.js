@@ -9,7 +9,7 @@
 
 const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
 const pad = (n) => String(n).padStart(4, '0');
-const FPS = 32;
+const LOOP_FPS = 40;
 
 export function pickVariant() {
   const portrait = window.innerWidth / window.innerHeight < 0.9;
@@ -22,19 +22,20 @@ export class Film {
   static HOLD = 27;
   static IDLE = [24, 30];
 
-  constructor(canvas, { manifest, variant, reduce, onFrame, onReady }) {
+  constructor(canvas, { manifest, variant, reduce, onFrame, onReady, onProgress }) {
     this.canvas = canvas;
     this.ctx = canvas.getContext('2d', { alpha: false });
     const name = manifest[variant.name] ? variant.name : 'wide';
     this.m = manifest[name];
     this.base = `/frames/${name}-${variant.size}/`;
     this.reduce = reduce;
-    this.cb = { onFrame, onReady };
+    this.cb = { onFrame, onReady, onProgress };
+    this.loaded = 0;
     this.images = { f: new Array(this.m.frames), l: new Array(this.m.loop || 0) };
     this.beats = this.m.beats.map((b) => b - 1);
     // Players: the main film and the loop, each with a current frame, a target and a callback.
-    this.main = { f: this.beats[0], to: this.beats[0], done: null };
-    this.loop = { f: 0, to: 0, done: null, idle: 0 };
+    this.main = { f: this.beats[0], to: this.beats[0], done: null, fps: 32 };
+    this.loop = { f: 0, to: 0, done: null, idle: 0, fps: LOOP_FPS };
     this.mode = 'f';
     this.last = '';
     this.ready = false;
@@ -73,6 +74,8 @@ export class Film {
       img.onload = () => {
         this.images[seq][i] = img;
         this.last = '';
+        this.loaded += 1;
+        this.cb.onProgress?.(this.loaded / order.length);
         if (!this.ready && this.images.f[0]) {
           this.ready = true;
           this.cb.onReady?.();
@@ -99,9 +102,12 @@ export class Film {
     this.last = '';
   }
 
+  // Plays the main film to `frame`: about a second for one beat, never more than 1.6 s.
   travel(frame, done) {
     this.mode = 'f';
     this.main.to = clamp(frame, 0, this.m.frames - 1);
+    const dist = Math.abs(this.main.to - this.main.f);
+    this.main.fps = dist / clamp(dist / 32, 0.8, 1.6);
     this.main.done = done || null;
     if (this.reduce) this.main.f = this.main.to;
   }
@@ -126,8 +132,8 @@ export class Film {
   }
 
   step(pl, dt) {
-    if (pl.f < pl.to) pl.f = Math.min(pl.to, pl.f + dt * FPS);
-    else if (pl.f > pl.to) pl.f = Math.max(pl.to, pl.f - dt * FPS);
+    if (pl.f < pl.to) pl.f = Math.min(pl.to, pl.f + dt * pl.fps);
+    else if (pl.f > pl.to) pl.f = Math.max(pl.to, pl.f - dt * pl.fps);
     if (pl.f === pl.to && pl.done) {
       const cb = pl.done;
       pl.done = null;

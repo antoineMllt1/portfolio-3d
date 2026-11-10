@@ -35,6 +35,7 @@ function useContent() {
 
 // Media fields are { src, w, h } objects (older entries may be plain strings).
 const srcOf = (m) => (typeof m === 'string' ? m : m?.src || '');
+const PHOTO = '/media/images/antoine.jpg';
 const coverOf = (p, lang) => srcOf((lang === 'en' && p.media?.coverEn) || p.media?.cover || p.media?.image);
 const certCount = (certs) => certs.reduce((sum, c) => sum + Math.max(1, c.data.modules?.length || 0), 0);
 const host = (url) => {
@@ -48,7 +49,7 @@ const host = (url) => {
 function Floor({ i, floor, className = '', children }) {
   const on = floor === i;
   return (
-    <section className={`floor ${className} ${on ? 'on' : floor > i ? 'above' : 'below'}`} inert={on ? undefined : ''} aria-hidden={!on}>
+    <section className={`floor ${className} ${on ? 'on' : floor > i ? 'above' : 'below'}`} data-floor={i} inert={on ? undefined : ''} aria-hidden={!on}>
       {children}
     </section>
   );
@@ -66,6 +67,7 @@ export default function App() {
 
   const [reduce] = useState(() => matchMedia('(prefers-reduced-motion: reduce)').matches);
   const [ready, setReady] = useState(false);
+  const [progress, setProgress] = useState(0);
   const [floor, setFloor] = useState(0);
   const [current, setCurrent] = useState(0);
   const [busy, setBusy] = useState(false);
@@ -125,6 +127,7 @@ export default function App() {
           variant,
           reduce,
           onReady: () => setReady(true),
+          onProgress: (x) => setProgress(x),
           onFrame: (at) => {
             frameRef.current = at;
             const show = at.seq === 'f' ? Math.max(0, 1 - Math.abs(at.f - teardown) / 12) : 0;
@@ -163,6 +166,8 @@ export default function App() {
     lock(true);
     floorRef.current = to;
     setFloor(to);
+    // Keyboard users: focus follows the floor (its heading), without scrolling anything.
+    setTimeout(() => document.querySelector(`[data-floor="${to}"] h1, [data-floor="${to}"] h2`)?.focus({ preventScroll: true }), 420);
     const arrive = () => {
       if (to === PROJECTS && film?.m.loop) film.lift(() => lock(false));
       else lock(false);
@@ -288,9 +293,12 @@ export default function App() {
   const linkedin = settings.linkedin || 'https://www.linkedin.com/in/antoine-millot1';
   const names = t.tracks.filter(Boolean);
   const p = projects[current];
+  const hasMusic = !!settings.music;
+  const photo = srcOf(settings.photo) || PHOTO;
 
   return (
-    <div className={`app ${ready ? 'ready' : ''}`}>
+    <div className={`app floor-${floor} ${ready ? 'ready' : ''}`}>
+      {progress < 0.999 && <div className="progress" role="progressbar" aria-valuenow={Math.round(progress * 100)} aria-valuemin={0} aria-valuemax={100} aria-label={t.loading} style={{ transform: `scaleX(${progress})` }} />}
       <a href="#main" className="skip">{t.skip}</a>
       <div className="backdrop" aria-hidden>
         <img className="poster" src="/frames/poster.webp" alt="" />
@@ -324,12 +332,19 @@ export default function App() {
       </div>
 
       <header className="hud" data-ui>
-        <a className="brand" href={main} target="_blank" rel="noreferrer">
+        <button type="button" className="brand" onClick={() => goFloor(0)} aria-label={t.home}>
           <span className="mono">antoine</span>
           <span className="muted">.millot</span>
           <span className="badge">3D</span>
-        </a>
-        <nav className={`tracks ${floor >= 5 ? 'away' : ''}`} aria-label="Sections">
+        </button>
+        {/* Where we are: one dot per floor, the current floor's name */}
+        <nav className="floors-nav" aria-label={t.floors}>
+          {names.map((name, i) => (
+            <button key={name} type="button" className={floor === i ? 'on' : ''} onClick={() => goFloor(i)} aria-label={name} aria-current={floor === i ? 'true' : undefined} title={name} />
+          ))}
+          <span className="floor-name mono" aria-hidden>{String(floor + 1).padStart(2, '0')} · {names[floor]}</span>
+        </nav>
+        <nav className={`tracks ${floor >= PROJECTS ? 'away' : ''}`} aria-label={t.floors}>
           <span className="side mono">{t.side(floor)}</span>
           <ol>
             {names.map((name, i) => (
@@ -342,10 +357,12 @@ export default function App() {
           </ol>
         </nav>
         <div className="hud-right">
-          <button type="button" className="chip" onClick={music} aria-pressed={playing} aria-label={playing ? t.pause : t.play}>
-            <span className={`eq ${playing ? 'on' : ''}`} aria-hidden><i /><i /><i /></span>
-            <span className="chip-text">{playing ? t.pause : t.play}</span>
-          </button>
+          {hasMusic && (
+            <button type="button" className="chip" onClick={music} aria-pressed={playing} aria-label={playing ? t.pause : t.play}>
+              <span className={`eq ${playing ? 'on' : ''}`} aria-hidden><i /><i /><i /></span>
+              <span className="chip-text">{playing ? t.pause : t.play}</span>
+            </button>
+          )}
           <button type="button" className="chip mono" onClick={() => setLang(lang === 'fr' ? 'en' : 'fr')} aria-label={t.langSwitch}>
             {lang === 'fr' ? 'EN' : 'FR'}
           </button>
@@ -354,12 +371,6 @@ export default function App() {
       </header>
       {toast && <p className="toast mono" role="status">{toast}</p>}
 
-      {/* Floor dots on the right edge (small screens) + the next-floor button */}
-      <nav className="dots" aria-label={lang === 'fr' ? 'Étages' : 'Floors'} data-ui>
-        {names.map((name, i) => (
-          <button key={name} type="button" className={floor === i ? 'on' : ''} onClick={() => goFloor(i)} aria-label={name} aria-current={floor === i ? 'true' : undefined} />
-        ))}
-      </nav>
       {floor < FLOORS - 1 && (
         <button type="button" className="next mono" onClick={() => goFloor(floor + 1)} data-ui>
           <span>{names[floor + 1]}</span> ↓
@@ -370,23 +381,26 @@ export default function App() {
         <Floor i={0} floor={floor} className="intro">
           <div className="copy">
             <p className="mono prompt"><span className="sky">~/antoine</span> $ {t.intro.prompt}<span className="caret" /></p>
-            <h1>
-              <span className="name">{t.intro.name}</span>
+            <h1 tabIndex={-1}>
+              <span className="name">
+                <img className="avatar" src={photo} alt="" width="44" height="44" />
+                {t.intro.name}
+              </span>
               <span className="line">{t.intro.line}</span>
             </h1>
             <p className="sub">{pick(settings.tagline, lang) || t.intro.sub}</p>
             <div className="row">
-              <button type="button" className="btn primary" onClick={() => goFloor(PROJECTS)}>{names[PROJECTS]} ↓</button>
-              <button type="button" className="btn" onClick={music}>{playing ? t.pause : t.play}</button>
+              <button type="button" className="btn primary" onClick={() => goFloor(PROJECTS)}>{t.intro.cta} ↓</button>
+              <button type="button" className="btn" onClick={() => goFloor(FLOORS - 1)}>{t.intro.contact}</button>
             </div>
-            <p className="mono hint">{t.intro.hint}</p>
+            <p className="mono hint">{hasMusic ? t.intro.hintMusic : t.intro.hint}</p>
           </div>
         </Floor>
 
         <Floor i={1} floor={floor}>
           <div className="copy">
             <p className="kicker mono">{t.needle.kicker}</p>
-            <h2>{t.needle.title}</h2>
+            <h2 tabIndex={-1}>{t.needle.title}</h2>
             <p className="sub">{t.needle.body}</p>
           </div>
         </Floor>
@@ -394,7 +408,7 @@ export default function App() {
         <Floor i={2} floor={floor} className="top">
           <div className="copy">
             <p className="kicker mono">{t.layers.kicker}</p>
-            <h2>{t.layers.title}</h2>
+            <h2 tabIndex={-1}>{t.layers.title}</h2>
             <p className="sub">{t.layers.body}</p>
             {/* Same content as the floating labels, for screen readers */}
             <ul className="sr-only">
@@ -408,7 +422,7 @@ export default function App() {
         <Floor i={3} floor={floor} className="end">
           <div className="copy">
             <p className="kicker mono">{t.numbers.kicker}</p>
-            <h2>{t.numbers.title}</h2>
+            <h2 tabIndex={-1}>{t.numbers.title}</h2>
             <dl className="stats">
               {[
                 [projects.length, t.numbers.projects],
@@ -432,7 +446,7 @@ export default function App() {
             {p ? (
               <div key={p.slug} className="card-info">
                 <p className="mono muted">{pick(p.sector, lang)}</p>
-                <h2>{pick(p.title, lang)}</h2>
+                <h2 tabIndex={-1}>{pick(p.title, lang)}</h2>
                 <p className="sub">{pick(p.tagline, lang)}</p>
                 {p.result && <p className="result mono">{pick(p.result, lang)}</p>}
               </div>
@@ -463,7 +477,14 @@ export default function App() {
         <Floor i={5} floor={floor} className="contact">
           <div className="copy" data-scroll>
             <p className="kicker mono">{t.contact.kicker}</p>
-            <h2>{t.contact.title}</h2>
+            <h2 tabIndex={-1}>{t.contact.title}</h2>
+            <p className="who">
+              <img className="avatar" src={photo} alt="" width="44" height="44" />
+              <span>
+                <strong>{t.intro.name}</strong>
+                <span className="mono muted">{pick(settings.location, lang) || t.contact.location}</span>
+              </span>
+            </p>
             <p className="sub">{t.contact.body}</p>
             <div className="row">
               {email && <a className="btn primary" href={`mailto:${email}`}>{email}</a>}
