@@ -41,7 +41,11 @@ export const copy = {
     },
     crate: {
       kicker: 'B1 · Les projets',
-      title: 'Les projets qui tournent.',
+      title: 'Fouille dans le bac.',
+      open: 'Voir l’étude de cas',
+      prev: 'Projet précédent',
+      next: 'Projet suivant',
+      hint: 'Fais défiler pour sortir le disque suivant · clique sur la pochette pour l’ouvrir',
     },
     contact: {
       kicker: 'B2 · Face B',
@@ -92,7 +96,11 @@ export const copy = {
     },
     crate: {
       kicker: 'B1 · The projects',
-      title: 'What’s been playing.',
+      title: 'Dig through the crate.',
+      open: 'Read the case study',
+      prev: 'Previous project',
+      next: 'Next project',
+      hint: 'Scroll to pull out the next record · click the sleeve to open it',
     },
     contact: {
       kicker: 'B2 · Side B',

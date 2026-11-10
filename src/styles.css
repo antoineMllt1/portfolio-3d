@@ -98,15 +98,61 @@ button {
 .ready .poster {
   opacity: 0;
 }
-.veil {
+.sleeve-art {
   position: absolute;
-  inset: 0;
-  background: rgb(3 4 7 / 0.82);
+  left: 0;
+  top: 0;
+  transform-origin: 0 0;
   opacity: 0;
-  transition: opacity 0.6s ease;
+  mix-blend-mode: multiply;
+  will-change: transform, opacity;
+  pointer-events: none;
+  overflow: hidden;
+  background: #fff;
 }
-.veil.on {
-  opacity: 1;
+.sleeve-inner {
+  display: grid;
+  grid-template-rows: 62.5% 1fr;
+  width: 100%;
+  height: 100%;
+  animation: artin 0.3s ease;
+}
+@keyframes artin {
+  from {
+    opacity: 0;
+  }
+}
+.sleeve-inner img,
+.sleeve-blank {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  background: #163a6e;
+}
+.sleeve-band {
+  display: grid;
+  align-content: center;
+  gap: 10px;
+  padding: 0 44px;
+  background: #0a1f44;
+  color: #fff;
+}
+.sleeve-band .mono {
+  font-size: 18px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #ffb547;
+}
+.sleeve-band strong {
+  font-size: 40px;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+}
+.sleeve-band em {
+  font-style: normal;
+  font: 500 20px/1.3 'JetBrains Mono', monospace;
+  color: #c3ccdc;
 }
 .sr-only {
   position: absolute;
@@ -577,79 +623,92 @@ h2 {
   margin-right: 6px;
 }
 
-/* Projects */
+/* Projects: sticky panel on the left, the crate film behind */
 .projects {
   position: relative;
-  padding: 120px var(--gutter) 60px;
 }
-.grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
-  gap: 14px;
-  margin: 36px 0 0;
+.sticky {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  height: 100svh;
+  display: flex;
+  align-items: center;
+  padding: 96px var(--gutter);
+}
+.marker {
+  position: absolute;
+  left: 0;
+  height: 0;
+}
+.marker.end {
+  bottom: 100vh;
+  bottom: 100svh;
+}
+.panel {
+  padding: 26px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgb(3 4 7 / 0.72);
+}
+.panel h3 {
+  margin: 6px 0 0;
+  font-size: clamp(1.7rem, 3vw, 2.5rem);
+  font-weight: 700;
+  line-height: 1.02;
+  letter-spacing: -0.03em;
+  text-wrap: balance;
+}
+.card-info {
+  animation: in 0.35s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.card-info > .mono {
+  margin-top: 16px;
+  font-size: 12px;
+}
+.card-info .sub {
+  margin-top: 10px;
+  font-size: 16px;
+}
+@keyframes in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+.result {
+  margin-top: 14px;
+  color: var(--amber);
+  font-size: 13.5px;
+  font-weight: 600;
+}
+.tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 16px 0 0;
   padding: 0;
   list-style: none;
 }
-.grid a {
-  display: grid;
-  height: 100%;
+.tags li {
+  padding: 3px 8px;
   border: 1px solid var(--line);
-  border-radius: 10px;
-  overflow: hidden;
-  background: rgb(10 14 24 / 0.9);
-  text-decoration: none;
-  transition: border-color 0.25s, transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
+  border-radius: var(--r-sm);
+  font: 500 12px/1.5 'JetBrains Mono', monospace;
+  color: #c3ccdc;
 }
-.grid a:hover {
-  border-color: rgb(255 181 71 / 0.6);
-  transform: translateY(-3px);
-}
-.thumb {
-  display: block;
-  aspect-ratio: 16 / 10;
-  background: #0d1424;
-  overflow: hidden;
-}
-.thumb img {
-  display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  transition: transform 0.6s cubic-bezier(0.2, 0.8, 0.2, 1);
-}
-.grid a:hover .thumb img {
-  transform: scale(1.04);
-}
-.meta {
-  display: grid;
-  gap: 6px;
-  align-content: start;
-  padding: 14px 16px 18px;
-}
-.meta .mono {
-  font-size: 12px;
-}
-.meta strong {
-  font-size: 18px;
-  letter-spacing: -0.01em;
-}
-.meta .tagline {
-  color: #b9c2d3;
-  font-size: 14.5px;
-  line-height: 1.5;
-}
-@media (min-width: 900px) {
-  .grid .featured {
-    grid-column: span 2;
+@media (max-aspect-ratio: 9/10) {
+  .sticky {
+    align-items: flex-end;
+    padding-bottom: 24px;
   }
-  .grid .featured a {
-    grid-template-columns: 1.4fr 1fr;
+  .panel {
+    padding: 18px;
   }
-  .grid .featured .thumb {
-    align-self: center;
-  }
-  .grid .featured strong {
-    font-size: 24px;
+  .card-info .sub,
+  .panel .hint,
+  .tags {
+    display: none;
   }
 }
 

@@ -39,3 +39,29 @@ for f in (0.5, 0.62, 0.74, 0.87):
     rough = np.where(np.abs(r - f) < 0.006, 0.15, rough)
 Image.fromarray((np.clip(rough, 0, 1) * 255).astype(np.uint8)).save('tex/rough.png')
 print('ok')
+
+# Back of the sleeve that gets lifted: cream paper with a small printed block (the front stays white
+# so the project cover can be multiplied onto it in the browser).
+S2 = 1024
+back = Image.new('RGB', (S2, S2), (236, 231, 220))
+d = ImageDraw.Draw(back)
+grain = np.random.default_rng(5).normal(0, 4, (S2, S2, 1)).astype(np.int16)
+back = Image.fromarray(np.clip(np.asarray(back).astype(np.int16) + grain, 0, 255).astype(np.uint8))
+d = ImageDraw.Draw(back)
+navy = (10, 31, 68)
+f1 = ImageFont.truetype(FONT.format('Bold'), 34)
+f2 = ImageFont.truetype(FONT.format('Medium'), 20)
+d.text((80, 80), 'ANTOINE MILLOT', font=f1, fill=navy)
+d.text((80, 128), 'DATA · AI · DJ   —   SIDE A / SIDE B', font=f2, fill=navy)
+for i, line in enumerate(['A1  INTRO', 'A2  THE NEEDLE', 'A3  TEARDOWN', 'A4  THE NUMBERS', 'B1  THE PROJECTS', 'B2  SIDE B']):
+    d.text((80, 220 + i * 34), line, font=f2, fill=navy)
+d.rectangle([80, 880, 420, 900], fill=navy)
+x = 700
+rng = np.random.default_rng(9)
+for _ in range(40):
+    w = int(rng.integers(2, 7))
+    d.rectangle([x, 800, x + w, 900], fill=navy)
+    x += w + int(rng.integers(3, 8))
+d.text((700, 910), 'AM-2026-001', font=f2, fill=navy)
+back.save('tex/sleeve-back.png')
+print('back ok')
