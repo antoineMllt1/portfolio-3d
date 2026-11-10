@@ -128,6 +128,8 @@ def light(name, kind, loc, aim, power, color, **kw):
 # A window out of frame to the left (cool daylight, soft), the desk lamp (warm), a faint fill.
 light('Window', 'AREA', (-2.9, -0.55, 1.9), (0.1, -0.05, 0.8), 520, (0.8, 0.89, 1.0), shape='RECTANGLE', size=1.1, size_y=1.5)
 light('Lamp', 'SPOT', (0.94, 0.18, TOP + 0.66), (0.68, -0.12, TOP + 0.2), 40, (1.0, 0.64, 0.34), spot_size=math.radians(125), spot_blend=0.6, shadow_soft_size=0.035)
+# A ceiling light behind the deck: the streak on the vinyl and the rim on the tonearm.
+light('Ceiling', 'AREA', (-0.15, 0.2, 2.25), (0.0, -0.05, 0.8), 55, (1.0, 0.9, 0.78), size=0.35)
 light('Fill', 'AREA', (0.6, -2.6, 1.6), (0.2, 0, 0.8), 14, (1.0, 0.85, 0.7), size=2.0)
 
 # ---------------------------------------------------------------- camera

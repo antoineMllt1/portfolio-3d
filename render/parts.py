@@ -215,7 +215,7 @@ def add_smudges(m, base, amount, scale=14.0, source=None):
     return add2.outputs[0]
 
 
-def image_tex(m, path, non_color=False, coords='UV', scale=None):
+def image_tex(m, path, non_color=False, coords='UV', scale=None, rot=0.0):
     nodes, links = m.node_tree.nodes, m.node_tree.links
     tc = nodes.new('ShaderNodeTexCoord')
     tex = nodes.new('ShaderNodeTexImage')
@@ -226,17 +226,18 @@ def image_tex(m, path, non_color=False, coords='UV', scale=None):
     if scale:
         mp = nodes.new('ShaderNodeMapping')
         mp.inputs['Scale'].default_value = scale
+        mp.inputs['Rotation'].default_value = (0, 0, rot)
         links.new(out, mp.inputs['Vector'])
         out = mp.outputs['Vector']
     links.new(out, tex.inputs['Vector'])
     return tex
 
 
-def pbr(name, asset, scale=(1, 1, 1), tint=None, rough_mul=1.0, normal=1.0, coat=0.0, coat_rough=0.2, smudge=0.0):
+def pbr(name, asset, scale=(1, 1, 1), tint=None, rough_mul=1.0, normal=1.0, coat=0.0, coat_rough=0.2, smudge=0.0, rot=0.0):
     """Material from a Poly Haven texture set (diffuse, roughness, normal), UV-mapped."""
     m, nodes, links, b = new_mat(name)
     base = os.path.join(ASSETS, 'textures', asset)
-    d = image_tex(m, base + '_diff.jpg', scale=scale)
+    d = image_tex(m, base + '_diff.jpg', scale=scale, rot=rot)
     col = d.outputs['Color']
     if tint is not None:
         mix = nodes.new('ShaderNodeMix')
@@ -247,7 +248,7 @@ def pbr(name, asset, scale=(1, 1, 1), tint=None, rough_mul=1.0, normal=1.0, coat
         links.new(col, mix.inputs[6])
         col = mix.outputs[2]
     links.new(col, b.inputs['Base Color'])
-    r = image_tex(m, base + '_rough.jpg', True, scale=scale)
+    r = image_tex(m, base + '_rough.jpg', True, scale=scale, rot=rot)
     mul = nodes.new('ShaderNodeMath')
     mul.operation = 'MULTIPLY'
     mul.use_clamp = True
@@ -256,7 +257,7 @@ def pbr(name, asset, scale=(1, 1, 1), tint=None, rough_mul=1.0, normal=1.0, coat
     links.new(mul.outputs[0], b.inputs['Roughness'])
     if smudge:
         add_smudges(m, 0, smudge, source=mul.outputs[0])
-    n = image_tex(m, base + '_nor.jpg', True, scale=scale)
+    n = image_tex(m, base + '_nor.jpg', True, scale=scale, rot=rot)
     nm = nodes.new('ShaderNodeNormalMap')
     nm.inputs['Strength'].default_value = normal
     links.new(n.outputs['Color'], nm.inputs['Color'])
@@ -364,7 +365,7 @@ def paper_print(name, path, rough=0.5, coat=0.12):
 
 def materials():
     M = {
-        'walnut': pbr('Walnut', 'walnut_veneer', scale=(1.6, 1.6, 1.6), tint=(0.5, 0.36, 0.26), rough_mul=0.75, coat=0.3, coat_rough=0.25, smudge=0.06),
+        'walnut': pbr('Walnut', 'walnut_veneer', scale=(1.6, 1.6, 1.6), rot=math.pi / 2, tint=(0.5, 0.36, 0.26), rough_mul=0.75, coat=0.3, coat_rough=0.25, smudge=0.06),
         'oak': pbr('Oak', 'oak_veneer_01', scale=(2.2, 2.2, 2.2), rough_mul=1.0, normal=0.8),
         'ply': pbr('Plywood', 'plywood', scale=(2.5, 2.5, 2.5), rough_mul=1.0, normal=0.7),
         'wall': pbr('Wall', 'painted_plaster_wall', scale=(0.5, 0.5, 0.5), tint=srgb('#33415E'), rough_mul=1.05, normal=0.6),
@@ -384,7 +385,7 @@ def materials():
         'wire_g': mat('WireG', (0.02, 0.35, 0.05), 0.45),
         'wire_b': mat('WireB', (0.02, 0.08, 0.5), 0.45),
         'wire_w': mat('WireW', (0.7, 0.7, 0.68), 0.45),
-        'dust': mat('Dust', (0.22, 0.21, 0.2), 0.9, spec=0.1),
+        'dust': mat('Dust', (0.1, 0.095, 0.09), 0.95, spec=0.05),
         'paper': mat('Paper', (0.78, 0.76, 0.7), 0.6, spec=0.3, smudge=0.1),
         'skirting': mat('Skirting', (0.6, 0.6, 0.58), 0.45),
     }
@@ -541,7 +542,7 @@ def build_turntable(M, parent):
         bmesh.ops.scale(bm, verts=g['verts'], vec=(s * (rng.uniform(4, 10) if long else 1), s * rng.uniform(0.3, 1), s * 0.3))
         bmesh.ops.rotate(bm, verts=g['verts'], cent=(0, 0, 0), matrix=Euler((0, 0, rng.uniform(0, math.pi))).to_matrix())
         bmesh.ops.translate(bm, verts=g['verts'], vec=(x, y, zz + s * 0.15))
-    for _ in range(700):
+    for _ in range(320):
         a, rr = rng.uniform(0, 2 * math.pi), 0.15 * math.sqrt(rng.random())
         if rr > 0.052:
             speck(rr * math.cos(a), rr * math.sin(a), zr + REC_H)
