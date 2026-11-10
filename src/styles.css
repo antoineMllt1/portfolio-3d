@@ -278,31 +278,10 @@ h2[tabindex] {
     height: 24px;
   }
 }
-.avatar {
-  width: 44px;
-  height: 44px;
-  border-radius: 50%;
-  object-fit: cover;
-  border: 1px solid rgb(233 238 247 / 0.2);
-  box-shadow: 0 6px 18px -8px rgb(0 0 0 / 0.8);
-}
-h1 .name {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-.who {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-top: 20px;
-}
-.who span {
-  display: grid;
-  gap: 2px;
-}
-.who .mono {
+.where {
+  margin-top: 14px;
   font-size: 12px;
+  letter-spacing: 0.06em;
 }
 .badge {
   margin-left: 8px;
@@ -577,6 +556,7 @@ h1 {
   line-height: 0.95;
 }
 h1 .name {
+  display: block;
   font-size: 17px;
   font-weight: 600;
   letter-spacing: -0.01em;

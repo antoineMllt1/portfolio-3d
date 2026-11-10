@@ -35,7 +35,6 @@ function useContent() {
 
 // Media fields are { src, w, h } objects (older entries may be plain strings).
 const srcOf = (m) => (typeof m === 'string' ? m : m?.src || '');
-const PHOTO = '/media/images/antoine.jpg';
 const coverOf = (p, lang) => srcOf((lang === 'en' && p.media?.coverEn) || p.media?.cover || p.media?.image);
 const certCount = (certs) => certs.reduce((sum, c) => sum + Math.max(1, c.data.modules?.length || 0), 0);
 const host = (url) => {
@@ -294,7 +293,6 @@ export default function App() {
   const names = t.tracks.filter(Boolean);
   const p = projects[current];
   const hasMusic = !!settings.music;
-  const photo = srcOf(settings.photo) || PHOTO;
 
   return (
     <div className={`app floor-${floor} ${ready ? 'ready' : ''}`}>
@@ -382,10 +380,7 @@ export default function App() {
           <div className="copy">
             <p className="mono prompt"><span className="sky">~/antoine</span> $ {t.intro.prompt}<span className="caret" /></p>
             <h1 tabIndex={-1}>
-              <span className="name">
-                <img className="avatar" src={photo} alt="" width="44" height="44" />
-                {t.intro.name}
-              </span>
+              <span className="name">{t.intro.name}</span>
               <span className="line">{t.intro.line}</span>
             </h1>
             <p className="sub">{pick(settings.tagline, lang) || t.intro.sub}</p>
@@ -478,13 +473,7 @@ export default function App() {
           <div className="copy" data-scroll>
             <p className="kicker mono">{t.contact.kicker}</p>
             <h2 tabIndex={-1}>{t.contact.title}</h2>
-            <p className="who">
-              <img className="avatar" src={photo} alt="" width="44" height="44" />
-              <span>
-                <strong>{t.intro.name}</strong>
-                <span className="mono muted">{pick(settings.location, lang) || t.contact.location}</span>
-              </span>
-            </p>
+            <p className="mono muted where">{pick(settings.location, lang) || t.contact.location}</p>
             <p className="sub">{t.contact.body}</p>
             <div className="row">
               {email && <a className="btn primary" href={`mailto:${email}`}>{email}</a>}
