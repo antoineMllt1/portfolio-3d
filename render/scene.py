@@ -50,7 +50,7 @@ scene.render.engine = 'CYCLES'
 scene.cycles.device = 'CPU'
 scene.cycles.samples = args.samples
 scene.cycles.use_adaptive_sampling = True
-scene.cycles.adaptive_threshold = 0.02
+scene.cycles.adaptive_threshold = 0.04
 scene.cycles.use_denoising = True
 try:
     scene.cycles.denoiser = 'OPENIMAGEDENOISE'
@@ -472,7 +472,7 @@ cyl('LiftLabelB', 0.47, 0.004, (0, 0.012, 0), label, disc, verts=128, rot=(-math
 
 REST = dict(loc=V((0, SLOT0_Y, 0.07)), rot=Euler((math.radians(-10), 0, math.pi)))
 # Hero pose: out of the crate, turned round so the white face (-Y side) looks at the camera.
-HERO = dict(loc=V((1.3, -3.6, 0.85)), rot=Euler((math.radians(-7), 0, 0.22)))
+HERO = dict(loc=V((1.1, -3.6, 0.45)), rot=Euler((math.radians(-7), 0, 0.22)))
 
 
 def key(obj, path, frame, value):
@@ -538,7 +538,7 @@ track.up_axis = 'UP_Y'
 cam_data.dof.focus_object = target
 
 crate_world = lambda v: CRATE_AT + Euler((0, 0, CRATE_YAW)).to_matrix() @ v
-CRATE_TGT = crate_world(V((0.7, -1.6, 1.9)))
+CRATE_TGT = crate_world(V((0.7, -1.6, 1.75)))
 CRATE_POS = crate_world(V((1.4, -12.0, 5.4)))
 
 # Beats: camera position, look-at, sideways shift (object right (+) or left (−) of the text on wide
@@ -548,10 +548,10 @@ KEYS = [
     (BEATS[1], dict(pos=V((2.55, -2.85, 1.5)), tgt=V((0.95, -0.95, 0.68)), shift=0.55, explode=0, arm=1, f=2.0)),
     (BEATS[2], dict(pos=V((7.6, -8.6, 4.4)), tgt=V((0, 0, 1.6)), shift=1.1, explode=1, arm=0, f=6.0)),
     (BEATS[3], dict(pos=V((-6.2, -5.2, 3.2)), tgt=V((0.4, 0, 0.9)), shift=-1.9, explode=0.3, arm=0.4, f=4.0)),
-    (BEATS[4], dict(pos=CRATE_POS, tgt=CRATE_TGT, shift=2.6, explode=0, arm=0, f=4.5)),
+    (BEATS[4], dict(pos=CRATE_POS, tgt=CRATE_TGT, shift=2.2, explode=0, arm=0, f=4.5)),
     (BEATS[5], dict(pos=V((0.02, -1.1, 8.6)), tgt=V((0, 0, 0)), shift=1.7, explode=0, arm=1, f=8.0)),
-    (L0, dict(pos=CRATE_POS, tgt=CRATE_TGT, shift=2.6, explode=0, arm=0, f=4.5)),
-    (L0 + LOOP_LEN - 1, dict(pos=CRATE_POS, tgt=CRATE_TGT, shift=2.6, explode=0, arm=0, f=4.5)),
+    (L0, dict(pos=CRATE_POS, tgt=CRATE_TGT, shift=2.2, explode=0, arm=0, f=4.5)),
+    (L0 + LOOP_LEN - 1, dict(pos=CRATE_POS, tgt=CRATE_TGT, shift=2.2, explode=0, arm=0, f=4.5)),
 ]
 
 
