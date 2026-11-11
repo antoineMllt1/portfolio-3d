@@ -1,52 +1,50 @@
-// The rendered film (Blender, Cycles) drawn on a 2D canvas, played by time between "floors".
+// The rendered film (Blender, Cycles) drawn on a 2D canvas.
 //
-// Two sequences: the main film ('f', with one beat frame per floor) and the crate loop ('l', 48 frames
-// that start and end in the same pose, played when the projects floor is shown).
-//   travel(frame, done)  plays the main film from where it is to `frame`
-//   lift(done)           pulls the front record out of the crate (loop frames 0 → HOLD)
-//   putBack(done)        returns it (HOLD → last frame), then the main film resumes at the crate beat
-// Frames load coarse-to-fine, so the film is usable after ~20 images. The frames the page rests on
-// ("holds") also exist as bigger renders, drawn whenever they are the current frame; and at rest the
-// view drifts very slowly (a slight zoom and pan), so the picture never looks frozen.
+// Two frame sequences, rendered with motion blur:
+//   f  the camera travelling between the floors (one beat frame per floor);
+//   c  someone going through the crate: record k is pulled up at frame first + step·k.
+// The frames the page rests on ("holds") also exist as bigger, cleaner renders. At rest the hold fades
+// in over the film frame and the view drifts very slowly, so the picture never looks like a paused video.
+// Variants without motion frames (phones: `stills`) dissolve from hold to hold instead.
 
 const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
 const pad = (n) => String(n).padStart(4, '0');
-const LOOP_FPS = 40;
 
-export function pickVariant() {
+export function pickVariant(manifest) {
   const portrait = window.innerWidth / window.innerHeight < 0.9;
-  const dpr = window.devicePixelRatio || 1;
-  if (portrait) return { name: 'tall', size: window.innerWidth * dpr > 600 ? 'l' : 's' };
-  return { name: 'wide', size: window.innerWidth * dpr > 1300 ? 'l' : 's' };
+  const px = Math.max(window.innerWidth, window.innerHeight) * Math.min(window.devicePixelRatio || 1, 2);
+  const name = portrait && manifest.tall ? 'tall' : 'wide';
+  return { name, size: px > 1700 ? 'l' : 's' };
 }
 
 export class Film {
-  static HOLD = 27;
-  static IDLE = [24, 30];
-
-  constructor(canvas, { manifest, variant, reduce, onFrame, onReady, onProgress }) {
+  constructor(canvas, { manifest, variant, reduce, onReady, onProgress }) {
     this.canvas = canvas;
     this.ctx = canvas.getContext('2d', { alpha: false });
-    const name = manifest[variant.name] ? variant.name : 'wide';
-    this.m = manifest[name];
-    this.base = `/frames/${name}-${variant.size}/`;
+    this.m = manifest[variant.name];
+    this.base = `/frames/${variant.name}-${variant.size}/`;
+    this.stills = !!this.m.stills || reduce;
     this.reduce = reduce;
-    this.cb = { onFrame, onReady, onProgress };
-    this.loaded = 0;
-    this.images = { f: new Array(this.m.frames), l: new Array(this.m.loop || 0) };
+    this.cb = { onReady, onProgress };
+    this.len = { f: this.m.frames, c: this.m.crate.frames };
+    this.images = { f: [], c: [] };
     this.hd = {};
-    this.view = { s: 1, x: 0, y: 0 };
-    this.rest = 0; // seconds at rest
-    this.drawn = 0;
+    this.wanted = new Set();
     this.beats = this.m.beats.map((b) => b - 1);
-    // Players: the main film and the loop, each with a current frame, a target and a callback.
-    this.main = { f: this.beats[0], to: this.beats[0], done: null, fps: 32 };
-    this.loop = { f: 0, to: 0, done: null, idle: 0, fps: LOOP_FPS };
-    this.mode = 'f';
+    this.pos = { seq: 'f', f: this.beats[0] };
+    this.anim = null;
+    this.fade = null;
+    this.view = { s: 1, x: 0, y: 0 };
+    this.rest = 0;
+    this.hdAlpha = 0;
     this.last = '';
+    this.drawn = 0;
+    this.loaded = 0;
+    this.total = 1;
     this.ready = false;
     this.alive = true;
     this.now = performance.now();
+    this.snap = document.createElement('canvas');
     this.resize = this.resize.bind(this);
     window.addEventListener('resize', this.resize);
     this.resize();
@@ -59,41 +57,64 @@ export class Film {
     this.raf = requestAnimationFrame(tick);
   }
 
-  // Coarse-to-fine: every 8th frame of both sequences, then every 4th, 2nd, then the rest.
+  holdOf(k) {
+    return this.m.crate.first + this.m.crate.step * k;
+  }
+
+  // ---- loading: first hold, then the travel frames coarse-to-fine, then the crate, then the holds.
   load() {
-    const order = [];
-    const seen = new Set();
-    for (const step of [8, 4, 2, 1]) {
-      for (const seq of ['f', 'l']) {
-        for (let i = 0; i < this.images[seq].length; i += step) {
-          const k = `${seq}${i}`;
-          if (!seen.has(k)) seen.add(k), order.push([seq, i, false]);
-        }
-      }
-      if (step === 8) for (const [seq, i] of this.m.holds || []) order.push([seq, i, true]);
-    }
-    let next = 0;
-    const pump = () => {
-      if (!this.alive || next >= order.length) return;
-      const [seq, i, hold] = order[next++];
-      const img = new Image();
-      img.decoding = 'async';
-      img.onload = () => {
-        if (hold) this.hd[`${seq}${i}`] = img;
-        else this.images[seq][i] = img;
-        this.last = '';
-        this.loaded += 1;
-        this.cb.onProgress?.(this.loaded / order.length);
-        if (!this.ready && this.images.f[0]) {
-          this.ready = true;
-          this.cb.onReady?.();
-        }
-        pump();
-      };
-      img.onerror = pump;
-      img.src = `${this.base}${hold ? 'h_' : ''}${seq}_${pad(i + 1)}.webp`;
+    const queue = [];
+    const hold = (seq, i) => queue.push([seq, i, true]);
+    const motion = (seq, steps) => {
+      if (this.m.stills) return;
+      for (const step of steps) for (let i = 0; i < this.len[seq]; i += step) queue.push([seq, i, false]);
     };
-    for (let k = 0; k < 6; k++) pump();
+    hold('f', this.beats[0]);
+    motion('f', [6, 3]);
+    this.beats.slice(1).forEach((b) => hold('f', b));
+    motion('f', [1]);
+    hold('c', this.holdOf(0));
+    motion('c', [5, 1]);
+    for (let k = 1; k < this.m.crate.order.length; k++) hold('c', this.holdOf(k));
+    // The coarse passes queue some frames twice: keep the first.
+    const seen = new Set();
+    this.queue = queue.filter(([s, i, h]) => {
+      const key = `${h ? 'h' : ''}${s}${i}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+    this.total = this.queue.length;
+    for (let k = 0; k < 6; k++) this.pump();
+  }
+
+  pump() {
+    if (!this.alive) return;
+    // A hold the page is waiting on jumps the queue.
+    let idx = this.queue.findIndex(([s, i, h]) => h && this.wanted.has(`${s}${i}`));
+    if (idx < 0) idx = 0;
+    const job = this.queue.splice(idx, 1)[0];
+    if (!job) return;
+    const [seq, i, hold] = job;
+    const img = new Image();
+    img.decoding = 'async';
+    const done = () => {
+      this.loaded += 1;
+      this.cb.onProgress?.(this.loaded / this.total);
+      this.pump();
+    };
+    img.onload = () => {
+      if (hold) this.hd[`${seq}${i}`] = img;
+      else this.images[seq][i] = img;
+      this.last = '';
+      if (!this.ready && (this.hd[`f${this.beats[0]}`] || this.images.f[this.beats[0]])) {
+        this.ready = true;
+        this.cb.onReady?.();
+      }
+      done();
+    };
+    img.onerror = done;
+    img.src = `${this.base}${hold ? 'h_' : ''}${seq}_${pad(i + 1)}.webp`;
   }
 
   resize() {
@@ -110,98 +131,133 @@ export class Film {
     this.last = '';
   }
 
-  // Plays the main film to `frame`: about a second for one beat, never more than 1.6 s.
-  travel(frame, done) {
-    this.mode = 'f';
-    this.main.to = clamp(frame, 0, this.m.frames - 1);
-    const dist = Math.abs(this.main.to - this.main.f);
-    this.main.fps = dist / clamp(dist / 32, 0.8, 1.6);
-    this.main.done = done || null;
-    if (this.reduce) this.main.f = this.main.to;
+  // ---- moves
+  play(seq, to, seconds, done) {
+    if (this.stills) return this.dissolve(seq, to, done);
+    this.pos.seq = seq;
+    this.anim = { from: this.pos.f, to, t0: this.now, dur: Math.max(0.001, seconds) * 1000, done };
   }
 
-  lift(done) {
-    this.mode = 'l';
-    this.loop.to = Film.HOLD;
-    this.loop.done = done || null;
-    if (this.reduce) this.loop.f = Film.HOLD;
+  dissolve(seq, to, done, ms = 520) {
+    this.snap.width = this.canvas.width;
+    this.snap.height = this.canvas.height;
+    this.snap.getContext('2d').drawImage(this.canvas, 0, 0);
+    this.pos = { seq, f: to };
+    this.anim = null;
+    this.rest = 0;
+    this.fade = { t0: this.now, dur: this.reduce ? 1 : ms, done };
+    this.want(seq, to);
+    this.last = '';
   }
 
-  putBack(done) {
-    const end = this.m.loop - 1;
-    this.loop.to = end;
-    this.loop.done = () => {
-      this.loop.f = 0;
-      this.loop.to = 0;
-      this.mode = 'f';
+  want(seq, i) {
+    if (!this.hd[`${seq}${i}`]) this.wanted.add(`${seq}${i}`);
+  }
+
+  // Floors: one beat away the camera travels; further away (or without motion frames) it dissolves.
+  toBeat(index, fromIndex, done) {
+    const to = this.beats[index];
+    this.want('f', to);
+    if (this.pos.seq !== 'f' || Math.abs(index - fromIndex) !== 1) return this.dissolve('f', to, done);
+    this.play('f', to, 1.15, done);
+  }
+
+  // Crate: from the crate beat (frame 0 of `c`) to record k, or between two records.
+  toRecord(k, done) {
+    const to = this.holdOf(k);
+    this.want('c', to);
+    if (this.pos.seq !== 'c') this.pos = { seq: 'c', f: 0 };
+    const steps = Math.abs(to - this.pos.f) / this.m.crate.step;
+    this.play('c', to, clamp(0.38 + 0.11 * steps, 0.45, 1.5), done);
+  }
+
+  closeCrate(done, beatIndex) {
+    if (this.pos.seq !== 'c') return done?.();
+    const steps = this.pos.f / this.m.crate.step;
+    const back = () => {
+      this.pos = { seq: 'f', f: this.beats[beatIndex] };
       done?.();
     };
-    if (this.reduce) this.loop.f = end;
+    if (this.stills) return back();
+    this.play('c', 0, clamp(0.25 + 0.07 * steps, 0.3, 1.0), back);
   }
 
-  step(pl, dt) {
-    if (pl.f < pl.to) pl.f = Math.min(pl.to, pl.f + dt * pl.fps);
-    else if (pl.f > pl.to) pl.f = Math.max(pl.to, pl.f - dt * pl.fps);
-    if (pl.f === pl.to && pl.done) {
-      const cb = pl.done;
-      pl.done = null;
-      cb();
+  // ---- drawing
+  nearest(seq, i) {
+    const imgs = this.images[seq];
+    for (let d = 0; d < this.len[seq]; d++) {
+      if (imgs[i - d]) return i - d;
+      if (imgs[i + d]) return i + d;
     }
+    return -1;
   }
 
   tick() {
     const now = performance.now();
     const dt = Math.min(0.05, (now - this.now) / 1000);
     this.now = now;
-    this.step(this.main, dt);
-    let seq = 'f';
-    let f = this.main.f;
-    if (this.mode === 'l' && this.m.loop) {
-      this.step(this.loop, dt);
-      seq = 'l';
-      f = this.loop.f;
-      // Held out: a slow drift so the record never looks frozen.
-      if (f === Film.HOLD && this.loop.to === Film.HOLD && !this.loop.done && !this.reduce) {
-        this.loop.idle += dt;
-        const [a, b] = Film.IDLE;
-        f = a + ((b - a) * (1 - Math.cos(this.loop.idle * 0.9))) / 2;
+    const a = this.anim;
+    if (a) {
+      const t = clamp((now - a.t0) / a.dur, 0, 1);
+      this.pos.f = a.from + (a.to - a.from) * t;
+      if (t >= 1) {
+        this.anim = null;
+        this.pos.f = a.to;
+        a.done?.();
       }
     }
-    // At rest the view drifts (slow zoom, slight pan); on the move it eases back to the plain frame.
-    const atRest = this.main.f === this.main.to && (this.mode === 'f' || this.loop.to === Film.HOLD);
-    this.rest = atRest ? this.rest + dt : 0;
+    const moving = !!this.anim;
+    this.rest = moving ? 0 : this.rest + dt;
+    const { seq } = this.pos;
+    const i = Math.round(this.pos.f);
+    const key = `${seq}${i}`;
+    const hd = moving ? null : this.hd[key];
+    const j = this.nearest(seq, i);
+    const base = j >= 0 ? this.images[seq][j] : null;
+    // The clean hold fades in over the film frame once at rest.
+    this.hdAlpha = hd ? clamp(this.hdAlpha + dt / 0.35, 0, 1) : 0;
+    // Slow drift at rest (zoom in a little, tiny pan); eased back when moving.
     const v = this.view;
-    const tgt = atRest && !this.reduce ? { s: 1 + 0.045 * (1 - Math.cos((this.rest * 2 * Math.PI) / 30)) / 2, x: 10 * Math.sin((this.rest * 2 * Math.PI) / 41), y: 6 * Math.sin((this.rest * 2 * Math.PI) / 33 + 1) } : { s: 1, x: 0, y: 0 };
-    const k = 1 - Math.exp(-dt * (atRest ? 1.5 : 4));
+    const tgt = !moving && !this.reduce ? { s: 1 + (0.03 * (1 - Math.cos((this.rest * 2 * Math.PI) / 36))) / 2, x: 6 * Math.sin((this.rest * 2 * Math.PI) / 47), y: 3 * Math.sin((this.rest * 2 * Math.PI) / 39) } : { s: 1, x: 0, y: 0 };
+    const k = 1 - Math.exp(-dt * (moving ? 5 : 1.2));
     v.s += (tgt.s - v.s) * k;
     v.x += (tgt.x - v.x) * k;
     v.y += (tgt.y - v.y) * k;
-    const i0 = Math.round(f);
-    let i = this.nearest(seq, i0, -1);
-    if (i < 0) i = this.nearest(seq, i0, 1);
-    if (i < 0) return;
-    const img = this.hd[`${seq}${i}`] || this.images[seq][i];
-    const key = `${seq}${i}${img === this.images[seq][i] ? '' : 'h'}`;
-    const moved = Math.abs(v.s - 1) > 0.0005 || Math.abs(v.x) > 0.3 || Math.abs(v.y) > 0.3;
-    if (key === this.last && (!moved || now - this.drawn < 33)) return;
-    this.last = key;
+
+    const fading = this.fade ? clamp((now - this.fade.t0) / this.fade.dur, 0, 1) : 1;
+    const drifting = Math.abs(v.s - 1) > 0.0004 || Math.abs(v.x) > 0.2;
+    const state = `${key}|${j}|${hd ? 1 : 0}`;
+    const busy = moving || this.fade || (hd && this.hdAlpha < 1);
+    if (state === this.last && !busy && (!drifting || now - this.drawn < 40)) return;
+    if (!base && !hd) return;
+    this.last = state;
     this.drawn = now;
+    const { ctx } = this;
     const { dx, dy, dw, dh, dpr } = this.fit;
     const cx = this.canvas.width / 2;
     const cy = this.canvas.height / 2;
-    this.ctx.setTransform(v.s, 0, 0, v.s, cx * (1 - v.s) + v.x * dpr, cy * (1 - v.s) + v.y * dpr);
-    this.ctx.drawImage(img, dx, dy, dw, dh);
-    this.ctx.setTransform(1, 0, 0, 1, 0, 0);
-    const at = { seq, f: i };
-    this.cb.onFrame?.({ ...at, project: (name) => this.project(at, name), face: () => this.face(at) });
+    ctx.setTransform(v.s, 0, 0, v.s, cx * (1 - v.s) + v.x * dpr, cy * (1 - v.s) + v.y * dpr);
+    ctx.globalAlpha = 1;
+    if (base && !(hd && this.hdAlpha >= 1)) ctx.drawImage(base, dx, dy, dw, dh);
+    if (hd) {
+      ctx.globalAlpha = base ? this.hdAlpha : 1;
+      ctx.drawImage(hd, dx, dy, dw, dh);
+    }
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    if (this.fade) {
+      if (fading < 1) {
+        ctx.globalAlpha = 1 - fading * fading * (3 - 2 * fading);
+        ctx.drawImage(this.snap, 0, 0);
+      } else {
+        const done = this.fade.done;
+        this.fade = null;
+        done?.();
+      }
+    }
+    ctx.globalAlpha = 1;
   }
 
-  nearest(seq, i, dir) {
-    const imgs = this.images[seq];
-    for (let k = i; k >= 0 && k < imgs.length; k += dir) if (imgs[k]) return k;
-    return -1;
-  }
-
+  // Screen position (CSS px) of a point given in frame coordinates (0–1).
   toScreen([x, y]) {
     const { dx, dy, dw, dh, dpr } = this.fit;
     const { s, x: px, y: py } = this.view;
@@ -210,18 +266,10 @@ export class Film {
     return { x: (s * (dx + x * dw) + cx * (1 - s) + px * dpr) / dpr, y: (s * (dy + y * dh) + cy * (1 - s) + py * dpr) / dpr };
   }
 
-  // Screen position (CSS px) of an exported anchor.
-  project(at, name) {
-    const pts = at.seq === 'l' ? this.m.loopPoints?.[name] : this.m.points[name];
-    return pts ? this.toScreen(pts[at.f]) : null;
-  }
-
-  // The lifted sleeve's front face: four screen corners and how much it faces the camera.
-  face(at) {
-    const faces = at.seq === 'l' ? this.m.loopFaces : this.m.faces;
-    if (!faces) return null;
-    const F = faces[at.f];
-    return { corners: F.c.map((c) => this.toScreen(c)), v: F.v };
+  // The front cover of record k when it is pulled up: four screen corners, or null while moving.
+  coverQuad(k) {
+    if (this.anim || this.fade || this.pos.seq !== 'c' || Math.round(this.pos.f) !== this.holdOf(k)) return null;
+    return this.m.crate.quads[k].map((p) => this.toScreen(p));
   }
 
   dispose() {
@@ -231,34 +279,6 @@ export class Film {
   }
 }
 
-// CSS matrix3d that maps a w×h element (transform-origin 0 0) onto four screen points
-// (top-left, top-right, bottom-right, bottom-left). Projective mapping via adjugates.
-export function matrix3dFor(w, h, [p0, p1, p2, p3]) {
-  const adj = (m) => [
-    m[4] * m[8] - m[5] * m[7], m[2] * m[7] - m[1] * m[8], m[1] * m[5] - m[2] * m[4],
-    m[5] * m[6] - m[3] * m[8], m[0] * m[8] - m[2] * m[6], m[2] * m[3] - m[0] * m[5],
-    m[3] * m[7] - m[4] * m[6], m[1] * m[6] - m[0] * m[7], m[0] * m[4] - m[1] * m[3],
-  ];
-  const mul = (a, b) => {
-    const c = [];
-    for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) c[3 * i + j] = a[3 * i] * b[j] + a[3 * i + 1] * b[3 + j] + a[3 * i + 2] * b[6 + j];
-    return c;
-  };
-  const mulV = (m, v) => [m[0] * v[0] + m[1] * v[1] + m[2] * v[2], m[3] * v[0] + m[4] * v[1] + m[5] * v[2], m[6] * v[0] + m[7] * v[1] + m[8] * v[2]];
-  const basis = (x1, y1, x2, y2, x3, y3, x4, y4) => {
-    const m = [x1, x2, x3, y1, y2, y3, 1, 1, 1];
-    const v = mulV(adj(m), [x4, y4, 1]);
-    return mul(m, [v[0], 0, 0, 0, v[1], 0, 0, 0, v[2]]);
-  };
-  const src = basis(0, 0, w, 0, w, h, 0, h);
-  const dst = basis(p0.x, p0.y, p1.x, p1.y, p2.x, p2.y, p3.x, p3.y);
-  const H = mul(dst, adj(src));
-  const n = H[8] || 1;
-  const t = H.map((x) => x / n);
-  return `matrix3d(${t[0]},${t[3]},0,${t[6]},${t[1]},${t[4]},0,${t[7]},0,0,1,0,${t[2]},${t[5]},0,${t[8]})`;
-}
-
-// Point-in-quad test for the sleeve (click / hover on the lifted record).
 export function inQuad(p, q) {
   let inside = false;
   for (let i = 0, j = q.length - 1; i < q.length; j = i++) {
