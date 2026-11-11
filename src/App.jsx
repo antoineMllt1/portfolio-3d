@@ -156,6 +156,13 @@ export default function App() {
     else travel();
   }, []);
 
+  // A hash typed in the address bar, or a link to "#contact", moves to that floor.
+  useEffect(() => {
+    const onHash = () => goFloor(Math.max(0, FLOOR_IDS.indexOf(location.hash.slice(1))));
+    window.addEventListener('hashchange', onHash);
+    return () => window.removeEventListener('hashchange', onHash);
+  }, [goFloor]);
+
   const goProject = useCallback((i) => {
     const n = filmRef.current?.m.crate.order.length || 0;
     if (!n || busyRef.current) return;
