@@ -5,7 +5,7 @@
 //   c  someone going through the crate: record k is pulled up at frame first + step·k.
 // The frames the page rests on ("holds") also exist as bigger, cleaner renders. At rest the hold fades
 // in over the film frame and the view drifts very slowly, so the picture never looks like a paused video.
-// Variants without motion frames (phones: `stills`) dissolve from hold to hold instead.
+// A sequence without motion frames (see `motion` in the manifest) dissolves from hold to hold instead.
 
 const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
 const pad = (n) => String(n).padStart(4, '0');
@@ -23,7 +23,9 @@ export class Film {
     this.ctx = canvas.getContext('2d', { alpha: false });
     this.m = manifest[variant.name];
     this.base = `/frames/${variant.name}-${variant.size}/`;
-    this.stills = !!this.m.stills || reduce;
+    // Which sequences have motion frames (a variant can be published with the travel frames only).
+    const has = this.m.motion || { f: !this.m.stills, c: !this.m.stills };
+    this.has = { f: !!has.f && !reduce, c: !!has.c && !reduce };
     this.reduce = reduce;
     this.cb = { onReady, onProgress };
     this.len = { f: this.m.frames, c: this.m.crate.frames };
@@ -66,7 +68,7 @@ export class Film {
     const queue = [];
     const hold = (seq, i) => queue.push([seq, i, true]);
     const motion = (seq, steps) => {
-      if (this.m.stills) return;
+      if (!this.has[seq]) return;
       for (const step of steps) for (let i = 0; i < this.len[seq]; i += step) queue.push([seq, i, false]);
     };
     hold('f', this.beats[0]);
@@ -133,9 +135,18 @@ export class Film {
 
   // ---- moves
   play(seq, to, seconds, done) {
-    if (this.stills) return this.dissolve(seq, to, done);
+    if (!this.has[seq] || !this.covered(seq, this.pos.f, to)) return this.dissolve(seq, to, done);
     this.pos.seq = seq;
     this.anim = { from: this.pos.f, to, t0: this.now, dur: Math.max(0.001, seconds) * 1000, done };
+  }
+
+  // Enough of the frames between a and b have arrived to play the move (one in three, the coarse pass).
+  covered(seq, a, b) {
+    const lo = Math.round(Math.min(a, b));
+    const hi = Math.round(Math.max(a, b));
+    let n = 0;
+    for (let i = lo; i <= hi; i++) if (this.images[seq][i]) n += 1;
+    return n * 3 >= hi - lo;
   }
 
   dissolve(seq, to, done, ms = 520) {
@@ -178,7 +189,7 @@ export class Film {
       this.pos = { seq: 'f', f: this.beats[beatIndex] };
       done?.();
     };
-    if (this.stills) return back();
+    if (!this.has.c || !this.covered('c', this.pos.f, 0)) return back();
     this.play('c', 0, clamp(0.25 + 0.07 * steps, 0.3, 1.0), back);
   }
 
