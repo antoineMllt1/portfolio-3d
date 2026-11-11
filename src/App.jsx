@@ -40,6 +40,16 @@ const host = (url) => {
     return url;
   }
 };
+const SITES = { 'github.com': 'GitHub', 'reddit.com': 'Reddit', 'x.com': 'X', 'twitter.com': 'X', 'instagram.com': 'Instagram', 'youtube.com': 'YouTube', 'medium.com': 'Medium', 'kaggle.com': 'Kaggle', 'huggingface.co': 'Hugging Face', 'malt.fr': 'Malt' };
+// "https://github.com/someone" → ["GitHub", "@someone"]
+const profile = (l) => {
+  const h = host(l.url);
+  let who = '';
+  try {
+    who = new URL(l.url).pathname.split('/').filter(Boolean).pop() || '';
+  } catch {}
+  return [l.label || SITES[h] || h, who && SITES[h] ? `@${who.replace(/^@/, '')}` : h];
+};
 const titleFromSlug = (slug) => slug.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 
 function Floor({ i, floor, className = '', children }) {
@@ -354,14 +364,14 @@ export default function App() {
               {links.map((l) => (
                 <li key={l.url}>
                   <a href={l.url} target="_blank" rel="noreferrer">
-                    <span>{l.label || host(l.url)}</span>
-                    <span className="mono">{host(l.url)} ↗</span>
+                    <span>{profile(l)[0]}</span>
+                    <span className="mono">{profile(l)[1]} ↗</span>
                   </a>
                 </li>
               ))}
               <li>
                 <a href={main} target="_blank" rel="noreferrer">
-                  <span>{t.contact.full}</span>
+                  <span>{t.full}</span>
                   <span className="mono">{host(main)} ↗</span>
                 </a>
               </li>
