@@ -52,7 +52,6 @@ export const copy = {
       title: 'On lance le prochain projet ?',
       body: 'Un process trop long, une donnée qui dort, une idée d’agent IA : écris-moi.',
       linkedin: 'LinkedIn',
-      credit: 'Scène rendue dans Blender',
     },
   },
   en: {
@@ -105,7 +104,6 @@ export const copy = {
       title: 'Shall we start the next one?',
       body: 'A process that takes too long, data nobody uses, an idea for an AI agent: write to me.',
       linkedin: 'LinkedIn',
-      credit: 'Scene rendered in Blender',
     },
   },
 };

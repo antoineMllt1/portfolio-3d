@@ -1,7 +1,7 @@
 // The page: five floors over a rendered film. One step of the wheel, a swipe or a key moves one
 // floor and the camera travels there by itself. On the projects floor, picking a title makes the film
 // go through the crate until that record is pulled up.
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { FLOOR_IDS, copy, pick } from './lib/copy.js';
 import { Film, inQuad, pickVariant } from './lib/film.js';
 import { useFloorInput } from './lib/input.js';
@@ -58,6 +58,69 @@ function Floor({ i, floor, className = '', children }) {
     <section id={FLOOR_IDS[i]} className={`floor ${className} ${on ? 'on' : ''}`} data-floor={i} inert={on ? undefined : ''} aria-hidden={!on}>
       {children}
     </section>
+  );
+}
+
+// A scrolling box without its native scrollbar: the box gets data-up / data-down while there is more
+// to see that way (the edges fade), and its parent gets the size and place of a slim indicator.
+function useScrollHint(ref, dep) {
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return undefined;
+    const update = () => {
+      const max = el.scrollHeight - el.clientHeight;
+      const over = max > 1;
+      const size = over ? Math.max(28, (el.clientHeight * el.clientHeight) / el.scrollHeight) : 0;
+      el.toggleAttribute('data-over', over);
+      el.toggleAttribute('data-up', over && el.scrollTop > 1);
+      el.toggleAttribute('data-down', over && el.scrollTop < max - 1);
+      el.parentElement.style.setProperty('--bar-size', `${size}px`);
+      el.parentElement.style.setProperty('--bar-pos', `${over ? (el.scrollTop / max) * (el.clientHeight - size) : 0}px`);
+    };
+    update();
+    el.addEventListener('scroll', update, { passive: true });
+    const watch = new ResizeObserver(update);
+    watch.observe(el);
+    return () => {
+      el.removeEventListener('scroll', update);
+      watch.disconnect();
+    };
+  }, [ref, dep]);
+}
+
+// The card shown beside the list while a title is hovered: the project's cover and what it is.
+function Peek({ peek, on, lang }) {
+  const ref = useRef(null);
+  const [top, setTop] = useState(0);
+  const rec = peek?.rec;
+  // Level with the hovered row, kept inside the floor.
+  useLayoutEffect(() => {
+    if (!peek || !ref.current) return;
+    const h = ref.current.offsetHeight;
+    setTop(Math.max(84, Math.min(window.innerHeight - h - 64, peek.y - h / 2)));
+  }, [peek]);
+  if (!rec) return null;
+  const cover = (lang === 'en' && rec.media?.coverEn) || rec.media?.cover;
+  return (
+    <aside ref={ref} className={`peek ${on ? 'on' : ''}`} style={{ left: peek.x, top }} aria-hidden>
+      <div className="peek-shot" key={`${rec.slug}-${lang}`} style={cover?.ph ? { backgroundImage: `url(${cover.ph})` } : undefined}>
+        {cover ? <img src={cover.src} alt="" width={cover.w} height={cover.h} decoding="async" /> : <img className="sleeve" src={`/covers/${rec.slug}.webp`} alt="" />}
+      </div>
+      <div className="peek-body" key={rec.slug}>
+        <p className="peek-kicker mono">
+          <span>{two(peek.no)}</span> {rec.sector ? pick(rec.sector, lang) : ''}
+        </p>
+        <p className="peek-title">{pick(rec.title, lang)}</p>
+        {rec.tagline && <p className="peek-line">{pick(rec.tagline, lang)}</p>}
+        {rec.tags?.length > 0 && (
+          <ul className="peek-tags mono">
+            {rec.tags.slice(0, 4).map((tag) => (
+              <li key={tag}>{tag}</li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </aside>
   );
 }
 
@@ -204,6 +267,47 @@ export default function App() {
     };
   }, []);
 
+  // ---- the list: its own slim scroll indicator, the current title kept in view, a preview on hover
+  const listRef = useRef(null);
+  const contactRef = useRef(null);
+  useScrollHint(listRef, records.length + others.length);
+  useScrollHint(contactRef, lang);
+  useEffect(() => {
+    const list = listRef.current;
+    const li = list?.children[current];
+    if (!li) return;
+    if (list.scrollHeight > list.clientHeight + 1) {
+      const top = li.offsetTop - 30;
+      const bottom = li.offsetTop + li.offsetHeight + 30;
+      if (top < list.scrollTop) list.scrollTo({ top, behavior: 'smooth' });
+      else if (bottom > list.scrollTop + list.clientHeight) list.scrollTo({ top: bottom - list.clientHeight, behavior: 'smooth' });
+    }
+    if (list.scrollWidth > list.clientWidth + 1) list.scrollTo({ left: li.offsetLeft - (list.clientWidth - li.offsetWidth) / 2, behavior: 'smooth' });
+  }, [current, records.length]);
+
+  const [canHover] = useState(() => matchMedia('(hover: hover) and (pointer: fine)').matches);
+  const [peek, setPeek] = useState(null);
+  const [peekOn, setPeekOn] = useState(false);
+  const showPeek = (rec, no, row) => {
+    if (!canHover || !rec.title) return;
+    const r = row.getBoundingClientRect();
+    const panel = row.closest('.panel').getBoundingClientRect();
+    setPeek({ rec, no, x: Math.round(panel.right + 28), y: r.top + r.height / 2 });
+    setPeekOn(true);
+  };
+  const hidePeek = () => setPeekOn(false);
+  // Hovering starts with the covers already there.
+  useEffect(() => {
+    if (!canHover || floor !== PROJECTS) return;
+    records.forEach((rec) => {
+      const cover = (lang === 'en' && rec.media?.coverEn) || rec.media?.cover;
+      if (cover) new Image().src = cover.src;
+    });
+  }, [canHover, floor, records, lang]);
+  useEffect(() => {
+    if (floor !== PROJECTS) setPeekOn(false);
+  }, [floor]);
+
   const music = () => setPlaying(toggle(settings.music || ''));
   const links = (settings.links || []).filter((l) => l.url);
   const email = settings.email;
@@ -318,10 +422,19 @@ export default function App() {
         <Floor i={PROJECTS} floor={floor} className="projects">
           <div className="copy panel" data-ui>
             <R i={0} as="p" className="kicker mono">04 — {t.projects.title} · {t.projects.count(records.length + others.length)}</R>
-            <R i={1} as="ol" className="list" data-scroll>
+            <R i={1} className="scroller">
+              <ol ref={listRef} className="list" data-scroll onPointerLeave={hidePeek} onScroll={hidePeek} onBlur={hidePeek}>
               {records.map((rec, i) => (
                 <li key={rec.slug}>
-                  <button type="button" className={i === current ? 'on' : ''} onClick={() => goProject(i)} aria-current={i === current ? 'true' : undefined} disabled={busy && i !== current}>
+                  <button
+                    type="button"
+                    className={i === current ? 'on' : ''}
+                    onClick={() => goProject(i)}
+                    onPointerEnter={(e) => e.pointerType === 'mouse' && showPeek(rec, i + 1, e.currentTarget)}
+                    onFocus={(e) => e.currentTarget.matches(':focus-visible') && showPeek(rec, i + 1, e.currentTarget)}
+                    aria-current={i === current ? 'true' : undefined}
+                    disabled={busy && i !== current}
+                  >
                     <span className="no mono">{two(i + 1)}</span>
                     <img src={`/covers/${rec.slug}.webp`} alt="" width="28" height="28" loading="lazy" decoding="async" />
                     <span className="name">{pick(rec.title, lang)}</span>
@@ -331,13 +444,15 @@ export default function App() {
               ))}
               {others.map((rec) => (
                 <li key={rec.slug}>
-                  <a href={`${main}/projets/${rec.slug}`} target="_blank" rel="noreferrer">
+                  <a href={`${main}/projets/${rec.slug}`} target="_blank" rel="noreferrer" onPointerEnter={(e) => e.pointerType === 'mouse' && showPeek(rec, records.length + 1, e.currentTarget)}>
                     <span className="no mono">+</span>
                     <span className="name">{pick(rec.title, lang)}</span>
                     <span className="sector mono">↗</span>
                   </a>
                 </li>
               ))}
+              </ol>
+              <span className="bar" aria-hidden><i /></span>
             </R>
             {p && (
               <R i={2} className="detail" key={p.slug} data-focus tabIndex={-1} aria-live="polite">
@@ -356,10 +471,11 @@ export default function App() {
               </R>
             )}
           </div>
+          <Peek peek={peek} on={peekOn} lang={lang} />
         </Floor>
 
         <Floor i={4} floor={floor}>
-          <div className="copy" data-scroll>
+          <div ref={contactRef} className="copy" data-scroll>
             <R i={0} as="p" className="kicker mono">05 — {t.floors[4]}</R>
             <R i={1} as="h2" data-focus tabIndex={-1}>{t.contact.title}</R>
             <R i={2} as="p" className="sub">{t.contact.body}</R>
@@ -383,7 +499,7 @@ export default function App() {
                 </a>
               </li>
             </R>
-            <R i={5} as="p" className="foot mono">© {new Date().getFullYear()} Antoine Millot · {t.contact.credit}</R>
+            <R i={5} as="p" className="foot mono">© {new Date().getFullYear()} Antoine Millot</R>
           </div>
         </Floor>
       </main>

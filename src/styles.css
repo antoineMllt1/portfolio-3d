@@ -354,6 +354,35 @@ main [data-scroll] {
   max-height: 100%;
   overflow: auto;
 }
+/* Scrolling boxes: no native scrollbar. The edge fades where there is more to see. */
+@property --fade-up {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 0px;
+}
+@property --fade-down {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 0px;
+}
+[data-scroll] {
+  scrollbar-width: none;
+  overscroll-behavior: contain;
+  transition: --fade-up 0.25s ease, --fade-down 0.25s ease;
+}
+[data-scroll]::-webkit-scrollbar {
+  display: none;
+}
+[data-scroll][data-over] {
+  -webkit-mask-image: linear-gradient(to bottom, transparent, #000 var(--fade-up), #000 calc(100% - var(--fade-down)), transparent);
+  mask-image: linear-gradient(to bottom, transparent, #000 var(--fade-up), #000 calc(100% - var(--fade-down)), transparent);
+}
+[data-scroll][data-up] {
+  --fade-up: 34px;
+}
+[data-scroll][data-down] {
+  --fade-down: 34px;
+}
 .kicker {
   font-size: 11.5px;
   letter-spacing: 0.14em;
@@ -506,12 +535,45 @@ h2 {
   display: flex;
   flex-direction: column;
 }
-.list {
-  margin-top: 16px;
-  border-top: 1px solid var(--line);
-  overflow: auto;
+.scroller {
+  position: relative;
+  display: flex;
   min-height: 0;
-  scrollbar-width: thin;
+  margin-top: 16px;
+}
+.list {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  border-top: 1px solid var(--line);
+  overflow-y: auto;
+}
+/* Where you are in the list: a hairline with a short amber stroke, shown only when the list overflows. */
+.bar {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: -14px;
+  width: 2px;
+  border-radius: 2px;
+  background: rgb(242 239 232 / 0.1);
+  opacity: 0;
+  transition: opacity 0.3s;
+  pointer-events: none;
+}
+.list[data-over] + .bar {
+  opacity: 1;
+}
+.bar i {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: var(--bar-size, 0);
+  border-radius: 2px;
+  background: var(--amber);
+  transform: translateY(var(--bar-pos, 0));
 }
 .list button,
 .list a {
@@ -604,6 +666,90 @@ h2 {
 }
 .detail .row {
   margin-top: 18px;
+}
+
+/* Preview of a hovered title: the project's cover, beside the list */
+.peek {
+  position: absolute;
+  z-index: 2;
+  width: clamp(264px, 22vw, 340px);
+  border: 1px solid rgb(242 239 232 / 0.14);
+  border-radius: 10px;
+  background: rgb(10 13 21 / 0.86);
+  -webkit-backdrop-filter: blur(18px) saturate(1.2);
+  backdrop-filter: blur(18px) saturate(1.2);
+  box-shadow: 0 24px 60px rgb(0 0 0 / 0.5), 0 2px 8px rgb(0 0 0 / 0.3);
+  overflow: hidden;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateX(-10px) scale(0.98);
+  transform-origin: 0 50%;
+  transition: opacity 0.18s ease, transform 0.3s var(--ease), top 0.32s var(--ease);
+}
+.peek.on {
+  opacity: 1;
+  transform: none;
+}
+.peek-shot {
+  aspect-ratio: 16 / 10;
+  background: #10141f center / cover no-repeat;
+  border-bottom: 1px solid rgb(242 239 232 / 0.1);
+  animation: peek-in 0.3s ease both;
+}
+.peek-shot img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.peek-shot img.sleeve {
+  object-fit: contain;
+}
+.peek-body {
+  padding: 14px 16px 16px;
+  animation: peek-in 0.3s ease both;
+}
+@keyframes peek-in {
+  from {
+    opacity: 0;
+  }
+}
+.peek-kicker {
+  font-size: 10.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.peek-kicker span {
+  margin-right: 6px;
+  color: var(--amber);
+}
+.peek-title {
+  margin-top: 6px;
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+}
+.peek-line {
+  margin-top: 4px;
+  font-size: 13.5px;
+  line-height: 1.45;
+  color: var(--soft);
+}
+.peek-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 12px;
+}
+.peek-tags li {
+  padding: 3px 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  color: var(--soft);
 }
 
 /* Contact */
@@ -717,14 +863,21 @@ h2 {
     display: none;
   }
   /* The list becomes a strip of covers to swipe through */
+  .scroller {
+    display: block;
+    margin-top: 14px;
+  }
+  .bar,
+  .peek {
+    display: none;
+  }
   .list {
     display: flex;
     gap: 6px;
-    margin-top: 14px;
     border: 0;
     overflow-x: auto;
+    overflow-y: hidden;
     scroll-snap-type: x proximity;
-    scrollbar-width: none;
   }
   .list li {
     flex: none;
